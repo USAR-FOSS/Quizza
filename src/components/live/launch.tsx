@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { Calendar, Copy, Check, BarChart3 } from "lucide-react";
+import { Calendar, Radio, Copy, Check, BarChart3 } from "lucide-react";
 import { api, ApiClientError, type SessionCreated } from "@/lib/api-client";
 import { formatJoinCode } from "@/lib/codes";
+import { cn } from "@/lib/utils";
+
+type Mode = "scheduled" | "live";
 
 /** Default a datetime-local input value from an offset in hours. */
 function localValue(offsetHours: number): string {
@@ -24,6 +28,8 @@ export function Launch({
   title: string;
   questionCount: number;
 }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>("scheduled");
   const [opensAt, setOpensAt] = useState(localValue(0));
   const [closesAt, setClosesAt] = useState(localValue(4));
   const [session, setSession] = useState<SessionCreated | null>(null);
@@ -34,14 +40,23 @@ export function Launch({
     setBusy(true);
     setError("");
     try {
-      const created = await api.createSession({
-        quizId,
-        mode: "scheduled",
-        opensAt: new Date(opensAt).toISOString(),
-        closesAt: new Date(closesAt).toISOString(),
-      });
-      // the host holds the control key; keep it to view full results later.
+      const body =
+        mode === "scheduled"
+          ? {
+              quizId,
+              mode,
+              opensAt: new Date(opensAt).toISOString(),
+              closesAt: new Date(closesAt).toISOString(),
+            }
+          : { quizId, mode };
+      const created = await api.createSession(body);
+      // the host holds the control key; keep it to drive live mode and to view
+      // full (ungated) results later.
       localStorage.setItem(`quizza:host:${created.code}`, created.hostToken);
+      if (created.mode === "live") {
+        router.push(`/host/${created.code}`);
+        return;
+      }
       setSession(created);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Could not create the session");
@@ -65,36 +80,49 @@ export function Launch({
         {questionCount} {questionCount === 1 ? "question" : "questions"}
       </p>
 
-      <div className="mt-6 flex items-center gap-3 rounded-2xl border-2 border-ink bg-white p-4 shadow-pop">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-grape text-white">
-          <Calendar className="size-5" />
-        </span>
-        <span>
-          <span className="block font-display font-bold text-ink">Scheduled</span>
-          <span className="block text-xs text-ink-soft">Open for a window, self-paced</span>
-        </span>
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <ModeCard
+          active={mode === "scheduled"}
+          onClick={() => setMode("scheduled")}
+          icon={<Calendar className="size-5" />}
+          label="Scheduled"
+          blurb="Open for a window, self-paced"
+        />
+        <ModeCard
+          active={mode === "live"}
+          onClick={() => setMode("live")}
+          icon={<Radio className="size-5" />}
+          label="Live"
+          blurb="Host-driven, in sync"
+        />
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="font-display text-sm font-bold text-ink-soft">Opens</span>
-          <input
-            type="datetime-local"
-            value={opensAt}
-            onChange={(e) => setOpensAt(e.target.value)}
-            className="mt-1 w-full rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 font-semibold text-ink focus:bg-white focus:outline-none"
-          />
-        </label>
-        <label className="block">
-          <span className="font-display text-sm font-bold text-ink-soft">Closes</span>
-          <input
-            type="datetime-local"
-            value={closesAt}
-            onChange={(e) => setClosesAt(e.target.value)}
-            className="mt-1 w-full rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 font-semibold text-ink focus:bg-white focus:outline-none"
-          />
-        </label>
-      </div>
+      {mode === "scheduled" ? (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="font-display text-sm font-bold text-ink-soft">Opens</span>
+            <input
+              type="datetime-local"
+              value={opensAt}
+              onChange={(e) => setOpensAt(e.target.value)}
+              className="mt-1 w-full rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 font-semibold text-ink focus:bg-white focus:outline-none"
+            />
+          </label>
+          <label className="block">
+            <span className="font-display text-sm font-bold text-ink-soft">Closes</span>
+            <input
+              type="datetime-local"
+              value={closesAt}
+              onChange={(e) => setClosesAt(e.target.value)}
+              className="mt-1 w-full rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 font-semibold text-ink focus:bg-white focus:outline-none"
+            />
+          </label>
+        </div>
+      ) : (
+        <p className="mt-5 rounded-2xl border-2 border-dashed border-ink/20 p-4 text-center text-sm text-ink-soft">
+          Live sessions get a room code now. The live presenter screen is coming next.
+        </p>
+      )}
 
       {noQuestions && (
         <p className="mt-4 rounded-xl border-2 border-coral bg-coral/10 p-3 text-center text-sm font-semibold text-ink">
@@ -123,6 +151,36 @@ export function Launch({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+function ModeCard({
+  active,
+  onClick,
+  icon,
+  label,
+  blurb,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  blurb: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-2xl border-2 p-4 text-left transition-transform hover:-translate-y-0.5",
+        active ? "border-ink bg-white shadow-pop" : "border-ink/20 bg-paper-2",
+      )}
+    >
+      <span className="flex size-10 items-center justify-center rounded-xl border-2 border-ink bg-grape text-white">
+        {icon}
+      </span>
+      <span className="mt-2 block font-display font-bold text-ink">{label}</span>
+      <span className="block text-xs text-ink-soft">{blurb}</span>
+    </button>
   );
 }
 
@@ -160,7 +218,7 @@ function Created({ session, title }: { session: SessionCreated; title: string })
         {copied ? "Copied" : "Copy join link"}
       </button>
 
-      {session.opensAt && session.closesAt && (
+      {session.mode === "scheduled" && session.opensAt && session.closesAt && (
         <p className="mt-4 text-sm text-ink-soft">
           Open {new Date(session.opensAt).toLocaleString()} to{" "}
           {new Date(session.closesAt).toLocaleString()}

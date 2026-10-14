@@ -9,6 +9,8 @@ import {
   sessions,
 } from "@/lib/db/schema";
 import { HttpError } from "@/lib/api/http";
+import { publish } from "@/lib/realtime/bus";
+import { publishState } from "@/lib/realtime/snapshot";
 import { generateJoinCode, generateToken } from "@/lib/codes";
 import { QUESTION_TYPES, OPTION_COLORS } from "@/lib/quiz-constants";
 import { clampResponseMs, computePoints } from "@/lib/scoring";
@@ -58,6 +60,16 @@ async function requireSession(code: string): Promise<SessionRow> {
   const s = await getSessionRow(code);
   if (!s) throw new HttpError(404, "session_not_found", "Session not found");
   return s;
+}
+
+/** Resolve the current (most recent) session row for a code. For the SSE route. */
+export async function resolveSession(code: string) {
+  return getSessionRow(code);
+}
+
+/** Validate a participant's client token within a session. For the SSE route. */
+export async function getParticipantByToken(sessionId: string, clientToken: string) {
+  return getParticipant(sessionId, clientToken);
 }
 
 async function getParticipant(sessionId: string, clientToken: string) {
@@ -194,6 +206,7 @@ export async function joinSession(code: string, input: z.infer<typeof JoinBody>)
     .values({ sessionId: s.id, nickname: input.nickname, avatarColor, clientToken })
     .returning();
 
+  if (s.mode === "live") await publishState(s.id);
   return { id: p.id, nickname: p.nickname, avatarColor: p.avatarColor, clientToken };
 }
 
@@ -352,6 +365,15 @@ export async function submitAnswer(
       .where(eq(participants.id, participant.id));
   }
 
+  // live: tell the host how many have answered this question (host connection only)
+  if (s.mode === "live") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(answers)
+      .where(and(eq(answers.sessionId, s.id), eq(answers.questionId, q.id)));
+    publish(s.id, { kind: "tick", answeredCount: count });
+  }
+
   return {
     accepted: true as const,
     revealed: true,
@@ -446,4 +468,76 @@ export async function getResults(code: string) {
     leaderboard,
     questionStats,
   };
+}
+
+/* ------------------------- live host control ------------------------ */
+
+export type LiveAction = "start" | "reveal" | "next" | "end";
+
+/** Host-only control of a live session. Requires the host token. */
+export async function controlSession(
+  code: string,
+  hostToken: string,
+  action: LiveAction,
+) {
+  const s = await requireSession(code);
+  if (s.hostToken !== hostToken) {
+    throw new HttpError(403, "forbidden", "Invalid host token");
+  }
+  if (s.mode !== "live") {
+    throw new HttpError(409, "not_live", "Only live sessions can be controlled");
+  }
+
+  const qrows = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(eq(questions.quizId, s.quizId))
+    .orderBy(asc(questions.position));
+  const total = qrows.length;
+  const curIdx = s.currentQuestionId
+    ? qrows.findIndex((q) => q.id === s.currentQuestionId)
+    : -1;
+
+  if (action === "start") {
+    if (total === 0) throw new HttpError(409, "no_questions", "Add questions first");
+    await db
+      .update(sessions)
+      .set({
+        status: "active",
+        currentQuestionId: qrows[0].id,
+        questionStartedAt: new Date(),
+        revealed: false,
+      })
+      .where(eq(sessions.id, s.id));
+  } else if (action === "reveal") {
+    await db.update(sessions).set({ revealed: true }).where(eq(sessions.id, s.id));
+  } else if (action === "next") {
+    const nextIdx = curIdx + 1;
+    if (nextIdx >= total) {
+      await db
+        .update(sessions)
+        .set({ status: "ended", revealed: true, endedAt: new Date() })
+        .where(eq(sessions.id, s.id));
+    } else {
+      await db
+        .update(sessions)
+        .set({
+          status: "active",
+          currentQuestionId: qrows[nextIdx].id,
+          questionStartedAt: new Date(),
+          revealed: false,
+        })
+        .where(eq(sessions.id, s.id));
+    }
+  } else if (action === "end") {
+    await db
+      .update(sessions)
+      .set({ status: "ended", endedAt: new Date() })
+      .where(eq(sessions.id, s.id));
+  } else {
+    throw new HttpError(422, "bad_action", "Unknown action");
+  }
+
+  await publishState(s.id);
+  return { ok: true as const };
 }
