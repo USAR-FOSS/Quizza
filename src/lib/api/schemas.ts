@@ -1,0 +1,199 @@
+import { z } from "zod";
+import { OPTION_COLORS } from "@/lib/quiz-constants";
+
+/**
+ * Request and response schemas for the /api/v1 surface. These are used both for
+ * runtime validation in the route handlers and to generate the OpenAPI document,
+ * so the docs never drift from what the code accepts.
+ */
+
+export const colorEnum = z.enum(OPTION_COLORS);
+
+export const questionTypeEnum = z.enum([
+  "multiple_choice",
+  "true_false",
+  "poll",
+  "word_cloud",
+  "scale",
+  "open_text",
+]);
+
+export const sessionModeEnum = z.enum(["live", "scheduled"]);
+export const sessionStatusEnum = z.enum(["lobby", "active", "ended"]);
+
+/* ----------------------------- requests ----------------------------- */
+
+export const CreateSessionBody = z
+  .object({
+    quizId: z.string().uuid(),
+    mode: sessionModeEnum.default("live"),
+    // required for scheduled mode; ignored for live
+    opensAt: z.string().describe("ISO 8601 datetime").optional(),
+    closesAt: z.string().describe("ISO 8601 datetime").optional(),
+  })
+  .describe("Create a run (session) of a quiz");
+
+export const JoinBody = z
+  .object({
+    nickname: z.string().trim().min(1).max(40),
+    avatarColor: colorEnum.optional(),
+  })
+  .describe("Join a session as an anonymous participant");
+
+export const SubmitAnswerBody = z
+  .object({
+    questionId: z.string().uuid(),
+    clientToken: z.string().min(1),
+    optionId: z.string().uuid().optional(),
+    textValue: z.string().max(280).optional(),
+    numberValue: z.number().int().optional(),
+    // client-reported time taken; a fallback when no view token is present
+    elapsedMs: z.number().int().min(0).optional(),
+    // server-issued per-question view token (scheduled mode) for honest timing
+    viewToken: z.string().optional(),
+  })
+  .describe("Submit one answer to a question");
+
+/* ----------------------------- responses ---------------------------- */
+
+export const SessionCreated = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  mode: sessionModeEnum,
+  status: sessionStatusEnum,
+  opensAt: z.string().nullable(),
+  closesAt: z.string().nullable(),
+  // returned only at creation; the host keeps this secret
+  hostToken: z.string(),
+});
+
+export const QuizSummary = z.object({
+  title: z.string(),
+  coverIcon: z.string(),
+  theme: z.string(),
+});
+
+export const participationEnum = z.enum(["anonymous", "one_per_device", "signed_in"]);
+
+export const SessionPublic = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  mode: sessionModeEnum,
+  status: sessionStatusEnum,
+  opensAt: z.string().nullable(),
+  closesAt: z.string().nullable(),
+  participantCount: z.number().int(),
+  participation: participationEnum,
+  quiz: QuizSummary,
+});
+
+export const Participant = z.object({
+  id: z.string().uuid(),
+  nickname: z.string(),
+  avatarColor: z.string(),
+  // returned only at join; the client keeps this to reconnect and submit
+  clientToken: z.string(),
+});
+
+export const OptionPublic = z.object({
+  id: z.string().uuid(),
+  position: z.number().int(),
+  label: z.string(),
+  color: z.string().nullable(),
+});
+
+export const QuestionPublic = z.object({
+  id: z.string().uuid(),
+  position: z.number().int(),
+  type: questionTypeEnum,
+  prompt: z.string(),
+  timeLimitSec: z.number().int(),
+  points: z.number().int(),
+  settings: z.record(z.string(), z.unknown()),
+  options: z.array(OptionPublic),
+});
+
+export const QuestionList = z.object({
+  answered: z.array(z.string().uuid()),
+  questions: z.array(QuestionPublic),
+});
+
+export const ViewToken = z.object({ viewToken: z.string() });
+
+export const AnswerResult = z.object({
+  accepted: z.literal(true),
+  // whether correctness is revealed now (per the quiz's reveal policy)
+  revealed: z.boolean(),
+  isCorrect: z.boolean().nullable(),
+  pointsAwarded: z.number().int().nullable(),
+  correctOptionId: z.string().uuid().nullable(),
+});
+
+export const LeaderboardEntry = z.object({
+  participantId: z.string().uuid(),
+  nickname: z.string(),
+  avatarColor: z.string(),
+  score: z.number().int(),
+  rank: z.number().int(),
+});
+
+export const OptionTally = z.object({
+  optionId: z.string().uuid(),
+  label: z.string(),
+  count: z.number().int(),
+  isCorrect: z.boolean(),
+});
+
+export const QuestionStats = z.object({
+  questionId: z.string().uuid(),
+  prompt: z.string(),
+  type: questionTypeEnum,
+  responses: z.number().int(),
+  options: z.array(OptionTally),
+  textValues: z.array(z.string()),
+  numberAverage: z.number().nullable(),
+});
+
+export const Results = z.object({
+  totalParticipants: z.number().int(),
+  over: z.boolean(),
+  showAnswers: z.boolean(),
+  showBoard: z.boolean(),
+  leaderboard: z.array(LeaderboardEntry),
+  questionStats: z.array(QuestionStats),
+});
+
+export const ControlBody = z
+  .object({ action: z.enum(["start", "reveal", "next", "end"]) })
+  .describe("Host control action for a live session");
+
+export const Ok = z.object({ ok: z.literal(true) });
+
+export const ApiError = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+});
+
+/** Named registry consumed by the OpenAPI builder. */
+export const apiSchemas = {
+  CreateSessionBody,
+  JoinBody,
+  SubmitAnswerBody,
+  SessionCreated,
+  SessionPublic,
+  Participant,
+  QuestionPublic,
+  QuestionList,
+  AnswerResult,
+  LeaderboardEntry,
+  QuestionStats,
+  Results,
+  ControlBody,
+  Ok,
+  ApiError,
+} as const;
+
+export type ApiSchemaName = keyof typeof apiSchemas;
