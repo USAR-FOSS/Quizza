@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ *  quizza design system
+ *  playful, FOSS, high-energy but friendly.
+ *  soft paper backgrounds + candy accents + chunky display type.
+ * ------------------------------------------------------------------ */
+
+@theme {
+  /* surfaces */
+  --color-paper: #fbf7f0;
+  --color-paper-2: #f4ede1;
+  --color-ink: #1a1626;
+  --color-ink-soft: #4a4458;
+  --color-line: #e7ddcd;
+
+  /* candy accents */
+  --color-grape: #7c5cff;
+  --color-grape-dark: #5b3fd6;
+  --color-coral: #ff5c8a;
+  --color-lime: #8fe34a;
+  --color-sun: #ffb020;
+  --color-sky: #38bdf8;
+  --color-mint: #22d3a7;
+
+  /* semantic */
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+
+  /* type */
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* motion */
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* chunky retro-ish card shadow used across the app */
+@utility shadow-pop {
+  box-shadow: 4px 4px 0 0 var(--color-ink);
+}
+@utility shadow-pop-lg {
+  box-shadow: 7px 7px 0 0 var(--color-ink);
+}
+
+/* subtle dotted grid background for sections */
+@utility bg-dots {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--color-ink) 12%, transparent) 1.4px,
+    transparent 1.4px
+  );
+  background-size: 22px 22px;
+}
+
+/* floaty idle animation for decorative shapes */
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--tw-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-14px) rotate(var(--tw-rotate, 0deg));
+  }
+}
+@utility animate-float {
+  animation: float-y 6s var(--ease-out-soft) infinite;
+}
+
+/* reduced motion: let the OS win */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* nice focus ring everywhere */
+:where(a, button, input, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-grape);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
