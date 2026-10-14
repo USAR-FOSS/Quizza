@@ -3,6 +3,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { options, questions, quizzes } from "@/lib/db/schema";
 import { DEFAULTS, OPTION_COLORS } from "@/lib/quiz-constants";
 import type {
@@ -62,10 +63,16 @@ function defaultOptions(type: QuestionType): Array<{
  * ------------------------------------------------------------------ */
 
 export async function createQuiz(input: z.input<typeof createQuizSchema>) {
+  const user = await getCurrentUser();
   const data = createQuizSchema.parse(input);
   const [quiz] = await db
     .insert(quizzes)
-    .values({ title: data.title, coverIcon: data.coverIcon, theme: data.theme })
+    .values({
+      title: data.title,
+      coverIcon: data.coverIcon,
+      theme: data.theme,
+      ownerId: user?.id ?? null,
+    })
     .returning({ id: quizzes.id });
   return quiz.id;
 }
@@ -97,6 +104,20 @@ export async function updateQuiz(
     .update(quizzes)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(quizzes.id, quizId));
+}
+
+export async function deleteQuiz(quizId: string): Promise<{ ok: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false };
+  const quiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, quizId),
+    columns: { id: true, ownerId: true },
+  });
+  if (!quiz) return { ok: true };
+  if (quiz.ownerId && quiz.ownerId !== user.id) return { ok: false };
+  // cascades to questions, options, sessions, participants, answers
+  await db.delete(quizzes).where(eq(quizzes.id, quizId));
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------------ *

@@ -1,15 +1,19 @@
 import { Suspense } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { getQuizForEdit } from "@/lib/actions/quiz";
+import { getCurrentUser } from "@/lib/auth";
 import { Builder } from "@/components/builder/builder";
 import type { QuizWithQuestions } from "@/lib/db/schema-types";
 
 export const metadata = { title: "Builder - quizza" };
 
 async function Loaded({ quizId }: { quizId: string }) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const quiz = await getQuizForEdit(quizId);
   if (!quiz) notFound();
+  if (quiz.ownerId && quiz.ownerId !== user.id) redirect("/dashboard");
   return <Builder initial={quiz as unknown as QuizWithQuestions} />;
 }
 

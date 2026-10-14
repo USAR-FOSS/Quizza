@@ -103,12 +103,21 @@ function isUniqueViolation(err: unknown): boolean {
 
 /* ----------------------------- create ------------------------------- */
 
-export async function createSession(input: z.infer<typeof CreateSessionBody>) {
+export async function createSession(
+  input: z.infer<typeof CreateSessionBody>,
+  ownerUserId: string | null,
+) {
+  if (!ownerUserId) {
+    throw new HttpError(401, "signin_required", "Sign in to run a quiz");
+  }
   const quiz = await db.query.quizzes.findFirst({
     where: eq(quizzes.id, input.quizId),
-    columns: { id: true },
+    columns: { id: true, ownerId: true },
   });
   if (!quiz) throw new HttpError(404, "quiz_not_found", "Quiz not found");
+  if (quiz.ownerId && quiz.ownerId !== ownerUserId) {
+    throw new HttpError(403, "forbidden", "You do not own this quiz");
+  }
 
   let opensAt: Date | null = null;
   let closesAt: Date | null = null;
