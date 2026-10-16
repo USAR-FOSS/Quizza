@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "motion/react";
-import { X, Eye, Trophy, Users, Shuffle } from "lucide-react";
+import { Eye, Trophy, Users, Shuffle } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
 import {
   REVEAL_OPTIONS,
   LEADERBOARD_OPTIONS,
@@ -23,77 +23,92 @@ export function QuizSettingsPanel({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8">
-      <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        className="relative w-full max-w-lg rounded-3xl border-2 border-ink bg-paper p-6 shadow-pop-lg sm:p-8"
+    <Dialog title="Quiz settings" onClose={onClose}>
+      <Group
+        icon={<Eye className="size-4" />}
+        title="Show correct answers"
+        options={REVEAL_OPTIONS}
+        value={revealPolicy(settings)}
+        onChange={(v) =>
+          onChange({ revealAnswers: v as QuizSettings["revealAnswers"] })
+        }
+      />
+
+      <Group
+        icon={<Trophy className="size-4" />}
+        title="Show leaderboard"
+        options={LEADERBOARD_OPTIONS}
+        value={leaderboardPolicy(settings)}
+        onChange={(v) =>
+          onChange({ leaderboard: v as QuizSettings["leaderboard"] })
+        }
+      />
+
+      <Group
+        icon={<Users className="size-4" />}
+        title="Who can play"
+        options={PARTICIPATION_OPTIONS}
+        value={participationMode(settings)}
+        onChange={(v) =>
+          onChange({ participation: v as QuizSettings["participation"] })
+        }
+      />
+
+      <div className="mt-6">
+        <h3 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
+          <Shuffle className="size-4" />
+          Shuffle
+        </h3>
+        <div className="mt-2 space-y-2">
+          <Toggle
+            label="Allow players to join after the live quiz starts"
+            on={settings.allowLateJoin ?? true}
+            onChange={(v) => onChange({ allowLateJoin: v })}
+          />
+          <Toggle
+            label="Shuffle question order"
+            on={settings.shuffleQuestions ?? false}
+            onChange={(v) => onChange({ shuffleQuestions: v })}
+          />
+          <Toggle
+            label="Shuffle answer options"
+            on={settings.shuffleOptions ?? false}
+            onChange={(v) => onChange({ shuffleOptions: v })}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="font-display font-bold">Make it a game</h3>
+        <p className="mb-2 text-sm text-ink-soft">
+          Each player gets one double-points boost and one safety shield. Keep
+          off for assessments.
+        </p>
+        <Toggle
+          label="Enable powerups"
+          on={settings.powerups ?? false}
+          onChange={(v) => onChange({ powerups: v })}
+        />
+        <div className="mt-2">
+          <Toggle
+            label="Reward faster answers"
+            on={settings.speedBonus ?? false}
+            onChange={(v) => onChange({ speedBonus: v })}
+          />
+          <p className="mt-2 text-sm text-ink-soft">
+            Correct answers earn 50–100% of the question’s points, depending on
+            speed. Individual question settings can override this.
+          </p>
+        </div>
+      </div>
+
+      <button
+        onClick={onClose}
+        className="mt-7 flex h-12 w-full items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
       >
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-            Quiz settings
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-xl p-2 text-ink-soft transition-colors hover:bg-ink/5 hover:text-ink"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <Group
-          icon={<Eye className="size-4" />}
-          title="Show correct answers"
-          options={REVEAL_OPTIONS}
-          value={revealPolicy(settings)}
-          onChange={(v) => onChange({ revealAnswers: v as QuizSettings["revealAnswers"] })}
-        />
-
-        <Group
-          icon={<Trophy className="size-4" />}
-          title="Show leaderboard"
-          options={LEADERBOARD_OPTIONS}
-          value={leaderboardPolicy(settings)}
-          onChange={(v) => onChange({ leaderboard: v as QuizSettings["leaderboard"] })}
-        />
-
-        <Group
-          icon={<Users className="size-4" />}
-          title="Who can play"
-          options={PARTICIPATION_OPTIONS}
-          value={participationMode(settings)}
-          onChange={(v) => onChange({ participation: v as QuizSettings["participation"] })}
-        />
-
-        <div className="mt-6">
-          <h3 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
-            <Shuffle className="size-4" />
-            Shuffle
-          </h3>
-          <div className="mt-2 space-y-2">
-            <Toggle
-              label="Shuffle question order"
-              on={settings.shuffleQuestions ?? false}
-              onChange={(v) => onChange({ shuffleQuestions: v })}
-            />
-            <Toggle
-              label="Shuffle answer options"
-              on={settings.shuffleOptions ?? false}
-              onChange={(v) => onChange({ shuffleOptions: v })}
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-7 flex h-12 w-full items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-        >
-          Done
-        </button>
-      </motion.div>
-    </div>
+        Done
+      </button>
+    </Dialog>
   );
 }
 
@@ -109,6 +124,8 @@ function Toggle({
   return (
     <button
       onClick={() => onChange(!on)}
+      role="switch"
+      aria-checked={on}
       className="flex w-full items-center justify-between rounded-2xl border-2 border-ink/20 bg-paper-2 p-3 text-left transition-colors hover:border-ink/40"
     >
       <span className="font-display font-bold text-ink">{label}</span>
@@ -166,10 +183,14 @@ function Group({
                 value === o.value ? "bg-grape" : "bg-paper",
               )}
             >
-              {value === o.value && <span className="size-2 rounded-full bg-white" />}
+              {value === o.value && (
+                <span className="size-2 rounded-full bg-white" />
+              )}
             </span>
             <span className="min-w-0">
-              <span className="block font-display font-bold text-ink">{o.label}</span>
+              <span className="block font-display font-bold text-ink">
+                {o.label}
+              </span>
               <span className="block text-sm text-ink-soft">{o.blurb}</span>
             </span>
           </button>

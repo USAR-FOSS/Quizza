@@ -10,15 +10,17 @@ import {
   type OptionColor,
 } from "@/lib/quiz-constants";
 import { QUESTION_TYPE_ICON } from "@/components/ui/quiz-icons";
-import type {
-  OptionRow,
-  QuestionWithOptions,
-} from "@/lib/db/schema-types";
+import type { OptionRow, QuestionWithOptions } from "@/lib/db/schema-types";
 import { cn } from "@/lib/utils";
+import { QuestionMedia } from "@/components/ui/question-media";
+import { isMediaUrl } from "@/lib/media";
+import { useState } from "react";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 type Props = {
   question: QuestionWithOptions;
   index: number;
+  speedBonus?: boolean;
   onChange: (patch: Partial<QuestionWithOptions>) => void;
   onAddOption: () => void;
   onUpdateOption: (optionId: string, patch: Partial<OptionRow>) => void;
@@ -29,6 +31,7 @@ type Props = {
 export function QuestionEditor({
   question,
   index,
+  speedBonus = false,
   onChange,
   onAddOption,
   onUpdateOption,
@@ -37,6 +40,8 @@ export function QuestionEditor({
 }: Props) {
   const meta = QUESTION_TYPES[question.type];
   const TypeIcon = QUESTION_TYPE_ICON[question.type];
+  const [mediaDraft, setMediaDraft] = useState(question.mediaUrl ?? "");
+  const validMedia = !mediaDraft || isMediaUrl(mediaDraft);
 
   return (
     <motion.div
@@ -66,6 +71,66 @@ export function QuestionEditor({
         className="mt-4 w-full resize-none rounded-2xl border-2 border-ink bg-paper-2 p-4 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink placeholder:text-ink-soft/40 focus:bg-white focus:outline-none"
       />
 
+      <details
+        className="mt-4 rounded-2xl border border-ink/15 bg-paper-2/60 p-4"
+        open={Boolean(question.mediaUrl) || undefined}
+      >
+        <summary className="cursor-pointer font-display text-sm font-bold">
+          Add a picture, video, or audio clip
+        </summary>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <ImageUpload
+            quizId={question.quizId}
+            onUpload={(url) => {
+              setMediaDraft(url);
+              onChange({ mediaUrl: url });
+            }}
+          />
+          {question.mediaUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                setMediaDraft("");
+                onChange({ mediaUrl: null });
+              }}
+              className="text-sm font-semibold underline underline-offset-4"
+            >
+              Remove media
+            </button>
+          )}
+        </div>
+        <label
+          className="mt-3 block text-xs font-semibold text-ink-soft"
+          htmlFor="question-media"
+        >
+          Or paste a direct HTTPS link
+        </label>
+        <input
+          id="question-media"
+          type="text"
+          value={mediaDraft}
+          aria-invalid={!validMedia}
+          placeholder="https://example.com/illustration.webp"
+          maxLength={2048}
+          onChange={(event) => {
+            const value = event.target.value;
+            setMediaDraft(value);
+            if (!value || isMediaUrl(value))
+              onChange({ mediaUrl: value || null });
+          }}
+          className="mt-1 w-full rounded-xl border-2 border-ink/20 bg-paper px-3 py-2 text-sm"
+        />
+        {!validMedia && (
+          <p className="mt-1 text-sm text-grape-dark">
+            Enter a complete HTTPS URL to save it.
+          </p>
+        )}
+        <p className="mt-2 text-xs text-ink-soft">
+          Images, MP4/WebM video, and MP3/OGG audio. Use a direct file link.
+        </p>
+        <QuestionMedia url={question.mediaUrl} />
+      </details>
+
       {/* settings row */}
       <div className="mt-4 flex flex-wrap gap-3">
         <Stepper
@@ -88,6 +153,36 @@ export function QuestionEditor({
             step={100}
             onChange={(v) => onChange({ points: v })}
           />
+        )}
+        {meta.scorable && (
+          <label className="flex items-center gap-2 rounded-2xl border-2 border-ink/20 px-3 py-2 text-sm font-semibold">
+            Speed scoring
+            <select
+              value={
+                question.settings.speedBonus == null
+                  ? "quiz"
+                  : String(question.settings.speedBonus)
+              }
+              onChange={(event) =>
+                onChange({
+                  settings: {
+                    ...question.settings,
+                    speedBonus:
+                      event.target.value === "quiz"
+                        ? null
+                        : event.target.value === "true",
+                  },
+                })
+              }
+              className="min-w-0 rounded-lg bg-paper-2 px-2 py-1 text-sm"
+            >
+              <option value="quiz">
+                Quiz default ({speedBonus ? "on" : "off"})
+              </option>
+              <option value="true">On for this question</option>
+              <option value="false">Off for this question</option>
+            </select>
+          </label>
         )}
       </div>
 
@@ -177,7 +272,9 @@ function OptionsEditor({
 
             <input
               value={opt.label}
-              onChange={(e) => onUpdateOption(opt.id, { label: e.target.value })}
+              onChange={(e) =>
+                onUpdateOption(opt.id, { label: e.target.value })
+              }
               placeholder="Answer option…"
               maxLength={120}
               className="min-w-0 flex-1 rounded-lg bg-transparent px-1 py-1.5 font-semibold text-ink placeholder:text-ink-soft/50 focus:bg-white focus:outline-none"
@@ -354,7 +451,9 @@ function Stepper({
   return (
     <div className="flex items-center gap-2 rounded-2xl border-2 border-ink bg-paper-2 px-3 py-1.5">
       {icon && <span className="text-ink-soft">{icon}</span>}
-      <span className="font-display text-sm font-bold text-ink-soft">{label}</span>
+      <span className="font-display text-sm font-bold text-ink-soft">
+        {label}
+      </span>
       <div className="flex items-center gap-1">
         <button
           type="button"

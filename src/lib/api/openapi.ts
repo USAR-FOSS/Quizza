@@ -23,10 +23,100 @@ type RouteDef = {
   description?: string;
   parameters?: ParamDef[];
   body?: ApiSchemaName;
+  imageBody?: boolean;
   responses: Record<string, { description: string; schema?: ApiSchemaName }>;
 };
 
 const routes: RouteDef[] = [
+  {
+    method: "post",
+    path: "/api/v1/uploads",
+    tags: ["Media"],
+    summary: "Upload a quiz image or player photo",
+    description:
+      "Same-origin browser requests only. Send raw PNG/JPEG/WebP bytes, maximum 2 MiB. An authenticated quiz owner supplies x-quiz-id; a joined player supplies x-room-code and x-client-token (also updates their avatar). Images are public by unguessable URL. Limited per owner/player and by stored image quota.",
+    imageBody: true,
+    parameters: [
+      { name: "x-quiz-id", in: "header" },
+      { name: "x-room-code", in: "header" },
+      { name: "x-client-token", in: "header" },
+    ],
+    responses: {
+      "201": { description: "Uploaded image", schema: "UploadCreated" },
+      "403": {
+        description: "Invalid origin or credentials",
+        schema: "ApiError",
+      },
+      "413": { description: "Image or quota too large", schema: "ApiError" },
+      "415": { description: "Unsupported image", schema: "ApiError" },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/v1/uploads/{id}",
+    tags: ["Media"],
+    summary: "Read an uploaded image",
+    parameters: [{ name: "id", in: "path", required: true }],
+    responses: {
+      "200": { description: "Binary PNG/JPEG/WebP image" },
+      "404": { description: "Image not found" },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/v1/sessions/{code}/participants/me",
+    tags: ["Participants"],
+    summary: "Resume participant progress",
+    description:
+      "Returns this participant's answered IDs and consumed powerups. Personal results are withheld during live questions, then become available at the shared reveal, subject to the quiz answer policy.",
+    parameters: [
+      { name: "code", in: "path", required: true },
+      { name: "x-client-token", in: "header", required: true },
+    ],
+    responses: {
+      "200": { description: "Progress", schema: "ParticipantProgress" },
+      "401": { description: "Invalid participant", schema: "ApiError" },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/v1/sessions/{code}/questions/{questionId}/view",
+    tags: ["Play"],
+    summary: "Start or resume the scheduled question timer",
+    description:
+      "Returns a signed viewToken and the durable first startedAt timestamp. Repeated calls never reset the deadline. Supply viewToken when answering.",
+    parameters: [
+      { name: "code", in: "path", required: true },
+      { name: "questionId", in: "path", required: true },
+      { name: "x-client-token", in: "header", required: true },
+    ],
+    responses: {
+      "200": { description: "Question timer", schema: "ViewToken" },
+      "401": { description: "Invalid participant", schema: "ApiError" },
+      "409": { description: "Session not open", schema: "ApiError" },
+    },
+  },
+  {
+    method: "get",
+    path: "/api/v1/sessions/{code}/export",
+    tags: ["Results"],
+    summary: "Download all answers as CSV",
+    description:
+      "Owner's host token required as a Bearer credential. Downloads a CSV with nickname, score, question, answer, correctness, response time, and points. User-authored spreadsheet formulas are escaped.",
+    parameters: [
+      { name: "code", in: "path", required: true },
+      {
+        name: "authorization",
+        in: "header",
+        required: true,
+        description: "Bearer <host token>",
+      },
+    ],
+    responses: {
+      "200": { description: "CSV attachment (text/csv)" },
+      "403": { description: "Host token required", schema: "ApiError" },
+    },
+  },
   {
     method: "post",
     path: "/api/v1/sessions",
@@ -46,8 +136,11 @@ const routes: RouteDef[] = [
     path: "/api/v1/sessions/{code}",
     tags: ["Sessions"],
     summary: "Get public session info",
-    description: "Public details for a join screen. Never includes answers or the host token.",
-    parameters: [{ name: "code", in: "path", required: true, description: "Join code" }],
+    description:
+      "Public details for a join screen. Never includes answers or the host token.",
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+    ],
     responses: {
       "200": { description: "Session info", schema: "SessionPublic" },
       "404": { description: "Session not found", schema: "ApiError" },
@@ -58,8 +151,11 @@ const routes: RouteDef[] = [
     path: "/api/v1/sessions/{code}/participants",
     tags: ["Participants"],
     summary: "Join a session",
-    description: "Joins anonymously with a nickname. Returns a clientToken used to submit answers and reconnect.",
-    parameters: [{ name: "code", in: "path", required: true, description: "Join code" }],
+    description:
+      "Joins anonymously with a nickname. Returns a clientToken used to submit answers and reconnect.",
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+    ],
     body: "JoinBody",
     responses: {
       "201": { description: "Joined", schema: "Participant" },
@@ -77,13 +173,24 @@ const routes: RouteDef[] = [
       "Returns the quiz questions for a scheduled session so a player can take it self-paced. Correct answers are never included. Requires a participant client token.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
-      { name: "x-client-token", in: "header", required: true, description: "Participant client token" },
+      {
+        name: "x-client-token",
+        in: "header",
+        required: true,
+        description: "Participant client token",
+      },
     ],
     responses: {
       "200": { description: "Questions", schema: "QuestionList" },
-      "401": { description: "Missing or invalid client token", schema: "ApiError" },
+      "401": {
+        description: "Missing or invalid client token",
+        schema: "ApiError",
+      },
       "404": { description: "Session not found", schema: "ApiError" },
-      "409": { description: "Session is not a scheduled session, or is not open", schema: "ApiError" },
+      "409": {
+        description: "Session is not a scheduled session, or is not open",
+        schema: "ApiError",
+      },
     },
   },
   {
@@ -93,12 +200,20 @@ const routes: RouteDef[] = [
     summary: "Submit an answer",
     description:
       "Records one answer with its accuracy and response time. A participant may answer each question only once.",
-    parameters: [{ name: "code", in: "path", required: true, description: "Join code" }],
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+    ],
     body: "SubmitAnswerBody",
     responses: {
       "200": { description: "Answer recorded", schema: "AnswerResult" },
-      "404": { description: "Session, question, or participant not found", schema: "ApiError" },
-      "409": { description: "Already answered, or session not accepting answers", schema: "ApiError" },
+      "404": {
+        description: "Session, question, or participant not found",
+        schema: "ApiError",
+      },
+      "409": {
+        description: "Already answered, or session not accepting answers",
+        schema: "ApiError",
+      },
       "422": { description: "Validation error", schema: "ApiError" },
     },
   },
@@ -108,7 +223,9 @@ const routes: RouteDef[] = [
     tags: ["Results"],
     summary: "Get results and leaderboard",
     description: "Leaderboard and per-question aggregates for a session.",
-    parameters: [{ name: "code", in: "path", required: true, description: "Join code" }],
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+    ],
     responses: {
       "200": { description: "Results", schema: "Results" },
       "404": { description: "Session not found", schema: "ApiError" },
@@ -123,7 +240,12 @@ const routes: RouteDef[] = [
       "Host-only. Advances the live session: start, reveal, next, or end. Requires the host token as a Bearer credential.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
-      { name: "authorization", in: "header", required: true, description: "Bearer <host token>" },
+      {
+        name: "authorization",
+        in: "header",
+        required: true,
+        description: "Bearer <host token>",
+      },
     ],
     body: "ControlBody",
     responses: {
@@ -142,8 +264,18 @@ const routes: RouteDef[] = [
       "Server-Sent Events stream of state snapshots for a live session. Pass host=<host token> or player=<client token> in the query (EventSource cannot send headers). Responses are text/event-stream, not JSON.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
-      { name: "host", in: "query", required: false, description: "Host token (for the presenter)" },
-      { name: "player", in: "query", required: false, description: "Client token (for a participant)" },
+      {
+        name: "host",
+        in: "query",
+        required: false,
+        description: "Host token (for the presenter)",
+      },
+      {
+        name: "player",
+        in: "query",
+        required: false,
+        description: "Client token (for a participant)",
+      },
     ],
     responses: {
       "200": { description: "An event stream (text/event-stream)" },
@@ -198,13 +330,28 @@ export function buildOpenApiDocument() {
             },
           }
         : {}),
+      ...(r.imageBody
+        ? {
+            requestBody: {
+              required: true,
+              content: Object.fromEntries(
+                ["image/png", "image/jpeg", "image/webp"].map((type) => [
+                  type,
+                  { schema: { type: "string", format: "binary" } },
+                ]),
+              ),
+            },
+          }
+        : {}),
       responses: Object.fromEntries(
         Object.entries(r.responses).map(([status, resp]) => [
           status,
           {
             description: resp.description,
             ...(resp.schema
-              ? { content: { "application/json": { schema: ref(resp.schema) } } }
+              ? {
+                  content: { "application/json": { schema: ref(resp.schema) } },
+                }
               : {}),
           },
         ]),
@@ -222,6 +369,7 @@ export function buildOpenApiDocument() {
     },
     servers: [{ url: "/", description: "This instance" }],
     tags: [
+      { name: "Media", description: "Quiz images and participant photos" },
       { name: "Sessions", description: "Create and read runs of a quiz" },
       { name: "Participants", description: "Joining a session" },
       { name: "Play", description: "Taking a quiz and submitting answers" },

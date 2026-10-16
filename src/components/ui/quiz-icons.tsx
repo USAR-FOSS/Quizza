@@ -18,6 +18,12 @@ import {
   SlidersHorizontal,
   PenLine,
   HelpCircle,
+  Globe,
+  Music,
+  BookOpen,
+  Code,
+  ChefHat,
+  Leaf,
   type LucideIcon,
 } from "lucide-react";
 import type { QuestionType } from "@/lib/db/schema-types";
@@ -33,7 +39,7 @@ export const QUESTION_TYPE_ICON: Record<QuestionType, LucideIcon> = {
 };
 
 /** Lucide icon per quiz cover key. */
-const COVER_ICON_MAP: Record<string, LucideIcon> = {
+export const COVER_ICON_MAP: Record<string, LucideIcon> = {
   shapes: Shapes,
   zap: Zap,
   target: Target,
@@ -46,6 +52,12 @@ const COVER_ICON_MAP: Record<string, LucideIcon> = {
   star: Star,
   flask: FlaskConical,
   gamepad: Gamepad2,
+  globe: Globe,
+  music: Music,
+  book: BookOpen,
+  code: Code,
+  food: ChefHat,
+  leaf: Leaf,
 };
 
 export function coverIcon(key: string): LucideIcon {

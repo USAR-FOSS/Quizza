@@ -1,125 +1,202 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
-import { Loader2, Plus, Pencil, Play } from "lucide-react";
+import { desc, eq, sql } from "drizzle-orm";
+import { ArrowUpRight, Plus, Shapes, Radio, Trophy } from "lucide-react";
 import { db } from "@/lib/db";
-import { quizzes } from "@/lib/db/schema";
+import { quizzes, sessions } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
-import { coverIcon } from "@/components/ui/quiz-icons";
-import { DeleteQuiz } from "@/components/dashboard/delete-quiz";
-import { cn } from "@/lib/utils";
+import { QuizLibrary } from "@/components/dashboard/quiz-library";
+import { QuizBuddy } from "@/components/ui/quiz-buddy";
+import { EndSession } from "@/components/dashboard/end-session";
+import { formatJoinCode } from "@/lib/codes";
+import { UserMenu } from "@/components/site/user-menu";
 
-export const metadata = { title: "Your quizzes - quizza" };
+export const metadata = { title: "Your quiz corner · Quizza" };
 
 async function Inner() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
-
-  const rows = await db.query.quizzes.findMany({
-    where: eq(quizzes.ownerId, user.id),
-    orderBy: desc(quizzes.updatedAt),
-    with: { questions: { columns: { id: true } } },
-  });
-
+  if (!user) redirect("/login?next=/dashboard");
+  const [rows, recentSessions] = await Promise.all([
+    db.query.quizzes.findMany({
+      where: eq(quizzes.ownerId, user.id),
+      orderBy: desc(quizzes.updatedAt),
+      with: { questions: { columns: { id: true } } },
+    }),
+    db
+      .select({
+        id: sessions.id,
+        code: sessions.code,
+        mode: sessions.mode,
+        status: sessions.status,
+        active: sql<boolean>`${sessions.status} <> 'ended' AND (${sessions.closesAt} IS NULL OR ${sessions.closesAt} > now())`,
+        title: quizzes.title,
+        createdAt: sessions.createdAt,
+      })
+      .from(sessions)
+      .innerJoin(quizzes, eq(sessions.quizId, quizzes.id))
+      .where(eq(quizzes.ownerId, user.id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(8),
+  ]);
+  const firstName = user.name?.split(" ")[0] || "friend";
+  const active = (s: (typeof recentSessions)[number]) => s.active;
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
-            Your quizzes
-          </h1>
-          <p className="mt-1 text-ink-soft">
-            Signed in as {user.name || user.email}
-          </p>
-        </div>
-        <Link
-          href="/create"
-          className="inline-flex h-11 items-center gap-2 rounded-2xl border-2 border-ink bg-grape px-5 font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-        >
-          <Plus className="size-5" />
-          New quiz
-        </Link>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-xs text-ink-soft">
+          Signed in as {user.email || user.name}
+        </p>
+        <UserMenu name={user.name || user.email || "Host"} color="grape" />
       </div>
-
-      {rows.length === 0 ? (
-        <div className="mt-10 rounded-3xl border-2 border-dashed border-ink/20 p-12 text-center">
-          <p className="font-display text-lg font-bold text-ink">No quizzes yet</p>
-          <p className="mt-1 text-ink-soft">Create your first quiz to get started.</p>
+      <section className="relative overflow-hidden rounded-[2rem] border border-ink/15 bg-[#e9e2f7] px-6 py-8 sm:p-9">
+        <div className="relative z-10 max-w-lg">
+          <p className="eyebrow text-grape">Your quiz corner</p>
+          <h1 className="mt-3 font-display text-3xl font-extrabold tracking-[-.045em] sm:text-4xl">
+            Hey {firstName}, what’s the big question?
+          </h1>
+          <p className="mt-3 max-w-sm text-ink-soft">
+            A fresh idea or an old crowd favorite. Get your people playing.
+          </p>
+          <Link
+            href="/create"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-ink bg-grape px-5 py-3 font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5"
+          >
+            <Plus className="size-4" />
+            Make a new quiz
+          </Link>
         </div>
-      ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map((q) => {
-            const Icon = coverIcon(q.coverIcon);
-            return (
+        <QuizBuddy className="absolute -bottom-3 right-3 hidden w-52 rotate-6 lg:block" />
+      </section>
+      <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-5">
+        {[
+          { icon: Shapes, value: rows.length, label: "Quizzes made" },
+          {
+            icon: Radio,
+            value: recentSessions.filter(active).length,
+            label: "Active in recent runs",
+          },
+          {
+            icon: Trophy,
+            value: rows.reduce((total, q) => total + q.questions.length, 0),
+            label: "Good questions",
+          },
+        ].map(({ icon: Icon, value, label }) => (
+          <div
+            key={label}
+            className="rounded-2xl border border-ink/10 bg-white/70 p-4 sm:p-5"
+          >
+            <Icon className="size-5 text-grape" />
+            <p className="mt-3 font-display text-3xl font-extrabold tabular-nums">
+              {value}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft sm:text-sm">{label}</p>
+          </div>
+        ))}
+      </div>
+      <QuizLibrary
+        quizzes={rows.map((q) => ({
+          id: q.id,
+          title: q.title,
+          coverIcon: q.coverIcon,
+          theme: q.theme,
+          coverImage: q.settings.coverImage,
+          iconImage: q.settings.iconImage,
+          questionCount: q.questions.length,
+          updatedAt: q.updatedAt.toISOString(),
+        }))}
+      />
+      {recentSessions.length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-display text-xl font-bold">Recently played</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Pick up an active room, revisit the results, or download your data.
+          </p>
+          <div className="mt-5 divide-y divide-ink/10 overflow-hidden rounded-2xl border border-ink/15 bg-white/70">
+            {recentSessions.map((s) => (
               <div
-                key={q.id}
-                className="flex flex-col rounded-3xl border-2 border-ink bg-paper p-5 shadow-pop"
+                key={s.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-5"
               >
-                <div
-                  className={cn(
-                    "flex size-12 items-center justify-center rounded-2xl border-2 border-ink text-white",
-                    colorClass(q.theme),
+                <div className="min-w-0">
+                  <h3 className="truncate font-display font-bold">{s.title}</h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+                    <span
+                      className={`rounded-full px-2 py-0.5 font-semibold ${active(s) ? "bg-mint/20" : "bg-ink/5"}`}
+                    >
+                      {active(s)
+                        ? s.mode === "live"
+                          ? "Live room"
+                          : "Scheduled window"
+                        : "Finished"}
+                    </span>
+                    <span className="font-mono">{formatJoinCode(s.code)}</span>
+                    <span>
+                      {s.createdAt.toLocaleDateString("en", {
+                        month: "short",
+                        day: "numeric",
+                        timeZone: "UTC",
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  {active(s) && s.mode === "live" && (
+                    <Link
+                      href={`/host/${s.code}`}
+                      className="text-sm font-bold text-grape"
+                    >
+                      Resume hosting
+                    </Link>
                   )}
-                >
-                  <Icon className="size-6" />
-                </div>
-                <h2 className="mt-3 font-display text-lg font-bold text-ink">{q.title}</h2>
-                <p className="text-sm text-ink-soft">
-                  {q.questions.length} {q.questions.length === 1 ? "question" : "questions"}
-                </p>
-                <div className="mt-4 flex gap-2">
                   <Link
-                    href={`/build/${q.id}`}
-                    className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-ink bg-paper font-display text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5"
+                    href={`/results/${s.code}`}
+                    className="inline-flex items-center gap-1 text-sm font-bold"
                   >
-                    <Pencil className="size-4" />
-                    Edit
+                    Results
+                    <ArrowUpRight className="size-4" />
                   </Link>
-                  <Link
-                    href={`/present/${q.id}`}
-                    className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-ink bg-grape font-display text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5"
-                  >
-                    <Play className="size-4" />
-                    Launch
-                  </Link>
-                </div>
-                <div className="mt-2">
-                  <DeleteQuiz quizId={q.id} title={q.title} />
+                  {active(s) && <EndSession code={s.code} />}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </section>
       )}
     </>
   );
-}
-
-function colorClass(theme: string): string {
-  const map: Record<string, string> = {
-    grape: "bg-grape",
-    coral: "bg-coral",
-    mint: "bg-mint",
-    sky: "bg-sky",
-    sun: "bg-sun",
-    lime: "bg-lime",
-  };
-  return map[theme] ?? "bg-grape";
 }
 
 export default function DashboardPage() {
   return (
     <>
       <Navbar />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
-        <Suspense fallback={<Loader2 className="size-8 animate-spin text-grape" />}>
+      <main className="page-enter mx-auto w-full max-w-6xl flex-1 px-5 py-9 sm:px-8">
+        <Suspense fallback={<DashboardSkeleton />}>
           <Inner />
         </Suspense>
       </main>
       <Footer />
     </>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div role="status" aria-label="Loading your quiz collection">
+      <div className="skeleton h-64 rounded-[2rem]" />
+      <div className="mt-6 grid grid-cols-3 gap-5">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="skeleton h-32 rounded-2xl" />
+        ))}
+      </div>
+      <div className="mt-10 grid gap-5 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="skeleton h-64 rounded-3xl" />
+        ))}
+      </div>
+    </div>
   );
 }

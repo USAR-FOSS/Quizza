@@ -22,6 +22,20 @@
       "when": 1791873826450,
       "tag": "0002_abandoned_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792146582261,
+      "tag": "0003_pretty_bug",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792162012634,
+      "tag": "0004_typical_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

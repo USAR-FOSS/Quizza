@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, X, Clock, Radio, Trophy, Loader2, LogIn } from "lucide-react";
+import { Check, X, Clock, Radio, Trophy, LogIn } from "lucide-react";
 import {
   api,
   ApiClientError,
@@ -12,16 +12,31 @@ import {
   type Results,
   type SessionPublic,
 } from "@/lib/api-client";
-import { OPTION_COLORS, COLOR_BG, type OptionColor } from "@/lib/quiz-constants";
+import {
+  OPTION_COLORS,
+  COLOR_BG,
+  COLOR_TEXT,
+  type OptionColor,
+} from "@/lib/quiz-constants";
 import { Avatar } from "@/components/ui/avatar";
 import { LivePlayer } from "@/components/live/live-player";
 import { cn } from "@/lib/utils";
+import { QuestionMedia } from "@/components/ui/question-media";
+import { PowerupPicker } from "@/components/live/powerup-picker";
+import type { Powerup } from "@/lib/powerups";
+import { LoadingState } from "@/components/ui/loading-state";
+import { AvatarChoice } from "@/components/ui/avatar-choice";
+import { uploadImage } from "@/lib/upload-client";
+import { QuizCover, RoomTheme } from "./room-theme";
+import { QuizBuddy } from "@/components/ui/quiz-buddy";
 
 type Identity = {
   clientToken: string;
   participantId: string;
   nickname: string;
   avatarColor: string;
+  avatarUrl?: string | null;
+  photoWarning?: string;
 };
 
 type Phase =
@@ -48,7 +63,16 @@ export function Player({ code }: { code: string }) {
   const [results, setResults] = useState<Results | null>(null);
   const [note, setNote] = useState<string>("");
   const [live, setLive] = useState(false);
-  const [viewToken, setViewToken] = useState<string | undefined>(undefined);
+  const [view, setView] = useState<{
+    questionId: string;
+    viewToken: string;
+    startedAt: string;
+  }>();
+  const viewToken =
+    view?.questionId === questions[index]?.id ? view?.viewToken : undefined;
+  const startedAt =
+    view?.questionId === questions[index]?.id ? view?.startedAt : undefined;
+  const [usedPowerups, setUsedPowerups] = useState<Powerup[]>([]);
 
   // load session, then decide the entry phase
   useEffect(() => {
@@ -72,7 +96,8 @@ export function Player({ code }: { code: string }) {
         }
       } catch (err) {
         if (!alive) return;
-        if (err instanceof ApiClientError && err.status === 404) setPhase("notfound");
+        if (err instanceof ApiClientError && err.status === 404)
+          setPhase("notfound");
         else setPhase("notfound");
       }
     })();
@@ -85,7 +110,12 @@ export function Player({ code }: { code: string }) {
   const loadQuestions = useCallback(
     async (clientToken: string) => {
       try {
-        const { questions: qs, answered } = await api.getQuestions(code, clientToken);
+        const {
+          questions: qs,
+          answered,
+          usedPowerups,
+        } = await api.getQuestions(code, clientToken);
+        setUsedPowerups(usedPowerups);
         setQuestions(qs);
         // resume: start at the first question this participant has not answered
         const answeredSet = new Set(answered);
@@ -106,7 +136,10 @@ export function Player({ code }: { code: string }) {
       } catch (err) {
         if (err instanceof ApiClientError && err.code === "session_not_open") {
           setPhase("closed");
-        } else if (err instanceof ApiClientError && err.code === "not_scheduled") {
+        } else if (
+          err instanceof ApiClientError &&
+          err.code === "not_scheduled"
+        ) {
           setPhase("live-unsupported");
         } else {
           setPhase("closed");
@@ -116,7 +149,11 @@ export function Player({ code }: { code: string }) {
     [code],
   );
 
-  async function handleJoin(nickname: string, avatarColor: string) {
+  async function handleJoin(
+    nickname: string,
+    avatarColor: string,
+    photo: File | null,
+  ) {
     try {
       const p = await api.join(code, { nickname, avatarColor });
       const identity: Identity = {
@@ -124,17 +161,31 @@ export function Player({ code }: { code: string }) {
         participantId: p.id,
         nickname: p.nickname,
         avatarColor: p.avatarColor,
+        avatarUrl: p.avatarUrl,
       };
+      if (photo) {
+        try {
+          identity.avatarUrl = await uploadImage(photo, {
+            code,
+            clientToken: p.clientToken,
+          });
+        } catch (err) {
+          identity.photoWarning = `You joined, but your photo wasn’t uploaded: ${err instanceof Error ? err.message : "Please try a smaller image next time."}`;
+        }
+      }
       localStorage.setItem(storeKey(code), JSON.stringify(identity));
       setMe(identity);
       await loadQuestions(identity.clientToken);
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "signin_required") {
         setPhase("signin");
-      } else if (err instanceof ApiClientError && err.code === "session_not_open") {
+      } else if (
+        err instanceof ApiClientError &&
+        err.code === "session_not_open"
+      ) {
         setPhase("closed");
       } else {
-        setPhase("closed");
+        throw err;
       }
     }
   }
@@ -144,13 +195,17 @@ export function Player({ code }: { code: string }) {
   useEffect(() => {
     if (phase !== "question" || !me || !questions[index]) return;
     let alive = true;
-    setViewToken(undefined);
     api
       .getViewToken(code, questions[index].id, me.clientToken)
       .then((r) => {
-        if (alive) setViewToken(r.viewToken);
+        if (alive) setView({ questionId: questions[index].id, ...r });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive)
+          setNote(
+            "Couldn’t start the timer. Check your connection and reload to retry.",
+          );
+      });
     return () => {
       alive = false;
     };
@@ -160,7 +215,7 @@ export function Player({ code }: { code: string }) {
     optionId?: string;
     textValue?: string;
     numberValue?: number;
-    elapsedMs: number;
+    powerup?: Powerup;
   }) {
     if (!me) return;
     const q = questions[index];
@@ -172,14 +227,17 @@ export function Player({ code }: { code: string }) {
         ...payload,
       });
       setLastResult(result);
+      if (payload.powerup)
+        setUsedPowerups((used) => [...used, payload.powerup!]);
       setPhase("feedback");
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "already_answered") {
         advance();
       } else {
-        setNote(err instanceof ApiClientError ? err.message : "Something went wrong");
-        setPhase("feedback");
-        setLastResult(null);
+        setNote(
+          err instanceof ApiClientError ? err.message : "Something went wrong",
+        );
+        throw err;
       }
     }
   }
@@ -205,14 +263,30 @@ export function Player({ code }: { code: string }) {
   if (live) return <LivePlayer code={code} />;
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper bg-dots">
+    <RoomTheme
+      theme={accent}
+      className="flex min-h-screen flex-col bg-paper bg-dots"
+    >
+      {me?.photoWarning && (
+        <p role="status" className="bg-sun/20 p-3 text-center text-sm">
+          {me.photoWarning}
+        </p>
+      )}
       <TopBar session={session} me={me} />
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-5 py-8">
         <AnimatePresence mode="wait">
-          {phase === "loading" && <Centered key="l"><Loader2 className="size-8 animate-spin text-grape" /></Centered>}
+          {phase === "loading" && (
+            <Centered key="l">
+              <LoadingState label="Finding your next good question…" />
+            </Centered>
+          )}
 
           {phase === "notfound" && (
-            <Message key="nf" title="Room not found" body={`No active room for code ${code}.`} />
+            <Message
+              key="nf"
+              title="Room not found"
+              body={`No active room for code ${code}.`}
+            />
           )}
 
           {phase === "live-unsupported" && (
@@ -230,7 +304,14 @@ export function Player({ code }: { code: string }) {
               icon={<Clock className="size-8 text-ink" />}
               title="Not open right now"
               body={windowText(session)}
-            />
+            >
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-5 rounded-xl border-2 border-ink bg-grape px-5 py-3 font-bold text-white shadow-pop"
+              >
+                Check the room again
+              </button>
+            </Message>
           )}
 
           {phase === "signin" && (
@@ -248,7 +329,8 @@ export function Player({ code }: { code: string }) {
                 Sign in to play
               </h1>
               <p className="mt-2 text-ink-soft">
-                This quiz allows one attempt per person, so it needs you signed in.
+                This quiz allows one attempt per person, so it needs you signed
+                in.
               </p>
               <Link
                 href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}
@@ -261,7 +343,7 @@ export function Player({ code }: { code: string }) {
           )}
 
           {phase === "join" && (
-            <JoinCard key="join" accent={accent} onJoin={handleJoin} />
+            <JoinCard key="join" quiz={session?.quiz} onJoin={handleJoin} />
           )}
 
           {phase === "intro" && session && (
@@ -281,6 +363,10 @@ export function Player({ code }: { code: string }) {
               total={questions.length}
               onSubmit={submit}
               onTimeout={advance}
+              ready={Boolean(viewToken)}
+              startedAt={startedAt}
+              powerups={Boolean(session?.powerups)}
+              usedPowerups={usedPowerups}
             />
           )}
 
@@ -290,22 +376,27 @@ export function Player({ code }: { code: string }) {
               result={lastResult}
               note={note}
               last={index + 1 >= questions.length}
+              index={index}
               onNext={advance}
             />
           )}
 
-          {phase === "done" && (
-            <Done key="done" results={results} me={me} />
-          )}
+          {phase === "done" && <Done key="done" results={results} me={me} />}
         </AnimatePresence>
       </main>
-    </div>
+    </RoomTheme>
   );
 }
 
 /* ------------------------------ pieces ------------------------------ */
 
-function TopBar({ session, me }: { session: SessionPublic | null; me: Identity | null }) {
+function TopBar({
+  session,
+  me,
+}: {
+  session: SessionPublic | null;
+  me: Identity | null;
+}) {
   return (
     <header className="flex h-14 items-center justify-between border-b-2 border-ink/10 px-5">
       <span className="font-display text-sm font-bold text-ink-soft">
@@ -313,8 +404,15 @@ function TopBar({ session, me }: { session: SessionPublic | null; me: Identity |
       </span>
       {me && (
         <span className="flex items-center gap-2">
-          <Avatar name={me.nickname} color={me.avatarColor} size="sm" />
-          <span className="font-display text-sm font-bold text-ink">{me.nickname}</span>
+          <Avatar
+            name={me.nickname}
+            color={me.avatarColor}
+            src={me.avatarUrl}
+            size="sm"
+          />
+          <span className="font-display text-sm font-bold text-ink">
+            {me.nickname}
+          </span>
         </span>
       )}
     </header>
@@ -338,10 +436,12 @@ function Message({
   title,
   body,
   icon,
+  children,
 }: {
   title: string;
   body: string;
   icon?: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <motion.div
@@ -355,30 +455,43 @@ function Message({
           {icon}
         </div>
       )}
-      <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">{title}</h1>
+      <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
+        {title}
+      </h1>
       <p className="mt-2 text-ink-soft">{body}</p>
+      {children}
     </motion.div>
   );
 }
 
 function JoinCard({
-  accent,
+  quiz,
   onJoin,
 }: {
-  accent: string;
-  onJoin: (nickname: string, color: string) => Promise<void>;
+  quiz?: SessionPublic["quiz"];
+  onJoin: (
+    nickname: string,
+    color: string,
+    photo: File | null,
+  ) => Promise<void>;
 }) {
   const [nickname, setNickname] = useState("");
   const [color, setColor] = useState<string>(OPTION_COLORS[0]);
   const [busy, setBusy] = useState(false);
-  void accent;
+  const [error, setError] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
     if (!nickname.trim() || busy) return;
     setBusy(true);
+    setError("");
     try {
-      await onJoin(nickname.trim(), color);
+      await onJoin(nickname.trim(), color, photo);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn’t join. Please try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -392,12 +505,19 @@ function JoinCard({
       exit={{ opacity: 0 }}
       className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-7 shadow-pop-lg"
     >
-      <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-        Pick a name
+      {quiz && <QuizCover quiz={quiz} />}
+      <p className="mb-2 text-xs font-bold uppercase tracking-widest text-grape">
+        Scheduled · play at your pace
+      </p>
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
+        Your next little challenge.
       </h1>
+      <p className="mt-2 text-sm text-ink-soft">
+        No waiting room here. Choose a name, then start when you’re ready.
+      </p>
       <div className="mt-4 flex items-center gap-3">
-        <Avatar name={nickname || "?"} color={color} size="lg" />
         <input
+          aria-label="Your nickname"
           autoFocus
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
@@ -416,18 +536,31 @@ function JoinCard({
             className={cn(
               "size-9 rounded-xl border-2 transition-transform hover:scale-110",
               COLOR_BG[c as OptionColor],
-              color === c ? "border-ink ring-2 ring-ink ring-offset-2 ring-offset-paper" : "border-ink/30",
+              color === c
+                ? "border-ink ring-2 ring-ink ring-offset-2 ring-offset-paper"
+                : "border-ink/30",
             )}
           />
         ))}
       </div>
+      <AvatarChoice
+        name={nickname}
+        color={color}
+        file={photo}
+        onChange={setPhoto}
+      />
       <button
         type="submit"
         disabled={!nickname.trim() || busy}
         className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-grape font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50"
       >
-        {busy ? "Joining" : "Join"}
+        {busy ? "Getting you ready…" : "Get started"}
       </button>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-grape-dark">
+          {error}
+        </p>
+      )}
     </motion.form>
   );
 }
@@ -448,9 +581,12 @@ function Intro({
       exit={{ opacity: 0 }}
       className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-8 text-center shadow-pop-lg"
     >
-      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">{title}</h1>
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
+        {title}
+      </h1>
       <p className="mt-2 text-ink-soft">
-        {count} {count === 1 ? "question" : "questions"}. Answer fast and accurately.
+        {count} {count === 1 ? "question" : "questions"}. Answer fast and
+        accurately.
       </p>
       <button
         onClick={onStart}
@@ -468,6 +604,10 @@ function QuestionView({
   total,
   onSubmit,
   onTimeout,
+  ready,
+  startedAt,
+  powerups,
+  usedPowerups,
 }: {
   question: QuestionPublic;
   index: number;
@@ -476,20 +616,29 @@ function QuestionView({
     optionId?: string;
     textValue?: string;
     numberValue?: number;
-    elapsedMs: number;
-  }) => void;
+    powerup?: Powerup;
+  }) => Promise<void>;
   onTimeout: () => void;
+  ready: boolean;
+  startedAt?: string;
+  powerups: boolean;
+  usedPowerups: Powerup[];
 }) {
-  const startRef = useRef<number>(Date.now());
+  const startRef = useRef<number>(0);
   const [remaining, setRemaining] = useState(question.timeLimitSec);
   const [text, setText] = useState("");
   const done = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [powerup, setPowerup] = useState<Powerup>();
 
   useEffect(() => {
-    startRef.current = Date.now();
+    if (!startedAt) return;
+    startRef.current = new Date(startedAt).getTime();
     done.current = false;
     const id = setInterval(() => {
-      const left = question.timeLimitSec - (Date.now() - startRef.current) / 1000;
+      const left =
+        question.timeLimitSec - (Date.now() - startRef.current) / 1000;
       setRemaining(Math.max(0, left));
       if (left <= 0 && !done.current) {
         done.current = true;
@@ -499,15 +648,27 @@ function QuestionView({
     }, 200);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question.id]);
+  }, [question.id, startedAt]);
 
-  function elapsed() {
-    return Date.now() - startRef.current;
-  }
-  function pick(payload: { optionId?: string; textValue?: string; numberValue?: number }) {
-    if (done.current) return;
+  async function pick(payload: {
+    optionId?: string;
+    textValue?: string;
+    numberValue?: number;
+  }) {
+    if (done.current || !ready || busy) return;
     done.current = true;
-    onSubmit({ ...payload, elapsedMs: elapsed() });
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit({ ...payload, powerup });
+    } catch (err) {
+      done.current = false;
+      setError(
+        err instanceof Error ? err.message : "Couldn’t submit. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   const pct = (remaining / question.timeLimitSec) * 100;
@@ -530,14 +691,43 @@ function QuestionView({
         </span>
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full border-2 border-ink bg-paper-2">
-        <div className="h-full bg-grape transition-[width] duration-200" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full bg-grape transition-[width] duration-200"
+          style={{ width: `${pct}%` }}
+        />
       </div>
 
       <h1 className="mt-6 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
         {question.prompt}
       </h1>
+      <QuestionMedia url={question.mediaUrl} />
+      {powerups &&
+        ["multiple_choice", "true_false"].includes(question.type) && (
+          <PowerupPicker
+            selected={powerup}
+            used={usedPowerups}
+            onChange={setPowerup}
+            disabled={!ready || busy}
+          />
+        )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl bg-coral/10 p-3 text-sm font-semibold"
+        >
+          {error}
+        </p>
+      )}
+      {!ready && (
+        <p role="status" className="mt-4 text-sm text-ink-soft">
+          Preparing your question timer…
+        </p>
+      )}
 
-      <div className="mt-6">
+      <fieldset
+        disabled={!ready || busy || remaining <= 0}
+        className="mt-6 disabled:opacity-60"
+      >
         {question.options.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {question.options.map((o) => (
@@ -547,6 +737,8 @@ function QuestionView({
                 className={cn(
                   "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
                   COLOR_BG[(o.color as OptionColor) ?? "grape"] ?? "bg-grape",
+                  COLOR_TEXT[(o.color as OptionColor) ?? "grape"] ??
+                    "text-white",
                 )}
               >
                 {o.label}
@@ -589,7 +781,7 @@ function QuestionView({
             </button>
           </form>
         )}
-      </div>
+      </fieldset>
     </motion.div>
   );
 }
@@ -598,11 +790,13 @@ function Feedback({
   result,
   note,
   last,
+  index,
   onNext,
 }: {
   result: AnswerResult | null;
   note: string;
   last: boolean;
+  index: number;
   onNext: () => void;
 }) {
   const correct = result?.isCorrect;
@@ -615,7 +809,9 @@ function Feedback({
       className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-8 text-center shadow-pop-lg"
     >
       {note ? (
-        <h1 className="font-display text-2xl font-extrabold text-ink">{note}</h1>
+        <h1 className="font-display text-2xl font-extrabold text-ink">
+          {note}
+        </h1>
       ) : scored ? (
         <>
           <div
@@ -631,7 +827,19 @@ function Feedback({
             )}
           </div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">
-            {correct ? "Correct" : "Not quite"}
+            {correct
+              ? [
+                  "Right on.",
+                  "Nicely spotted.",
+                  "You know your stuff.",
+                  "That’s the one!",
+                ][index % 4]
+              : [
+                  "One to remember.",
+                  "A little plot twist.",
+                  "Now you know.",
+                  "Keep that curiosity.",
+                ][index % 4]}
           </h1>
           <p className="mt-1 font-display text-lg font-bold text-grape">
             +{result?.pointsAwarded ?? 0} points
@@ -639,11 +847,19 @@ function Feedback({
         </>
       ) : (
         <>
-          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border-2 border-ink bg-sky">
-            <Check className="size-8 text-white" strokeWidth={3} />
-          </div>
-          <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">Recorded</h1>
-          <p className="mt-1 text-ink-soft">Thanks for your answer.</p>
+          <QuizBuddy className="mx-auto w-28" mood="happy" />
+          <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">
+            {
+              ["Your take is in.", "Added to the mix.", "Consider it noted."][
+                index % 3
+              ]
+            }
+          </h1>
+          <p className="mt-1 text-ink-soft">
+            {last
+              ? "That’s your last response. Let’s wrap up."
+              : "Ready for the next little challenge?"}
+          </p>
         </>
       )}
       <button
@@ -656,8 +872,16 @@ function Feedback({
   );
 }
 
-function Done({ results, me }: { results: Results | null; me: Identity | null }) {
-  const mine = results?.leaderboard.find((e) => e.participantId === me?.participantId);
+function Done({
+  results,
+  me,
+}: {
+  results: Results | null;
+  me: Identity | null;
+}) {
+  const mine = results?.leaderboard.find(
+    (e) => e.participantId === me?.participantId,
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -673,8 +897,9 @@ function Done({ results, me }: { results: Results | null; me: Identity | null })
       </h1>
       {mine ? (
         <p className="mt-2 text-ink-soft">
-          You scored <span className="font-bold text-ink">{mine.score}</span> and placed{" "}
-          <span className="font-bold text-ink">#{mine.rank}</span> of {results?.totalParticipants}.
+          You scored <span className="font-bold text-ink">{mine.score}</span>{" "}
+          and placed <span className="font-bold text-ink">#{mine.rank}</span> of{" "}
+          {results?.totalParticipants}.
         </p>
       ) : (
         <p className="mt-2 text-ink-soft">Your answers were recorded.</p>
@@ -687,17 +912,26 @@ function Done({ results, me }: { results: Results | null; me: Identity | null })
               key={e.participantId}
               className={cn(
                 "flex items-center gap-3 rounded-2xl border-2 border-ink p-2.5",
-                e.participantId === me?.participantId ? "bg-grape/10" : "bg-paper-2",
+                e.participantId === me?.participantId
+                  ? "bg-grape/10"
+                  : "bg-paper-2",
               )}
             >
               <span className="w-6 text-center font-display font-extrabold text-ink-soft">
                 {e.rank}
               </span>
-              <Avatar name={e.nickname} color={e.avatarColor} size="sm" />
+              <Avatar
+                name={e.nickname}
+                color={e.avatarColor}
+                src={e.avatarUrl}
+                size="sm"
+              />
               <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">
                 {e.nickname}
               </span>
-              <span className="font-display font-extrabold text-ink">{e.score}</span>
+              <span className="font-display font-extrabold text-ink">
+                {e.score}
+              </span>
             </div>
           ))}
         </div>
@@ -720,6 +954,7 @@ function windowText(session: SessionPublic | null): string {
   const closes = session.closesAt ? new Date(session.closesAt) : null;
   const now = Date.now();
   if (opens && now < opens.getTime()) return `Opens ${opens.toLocaleString()}.`;
-  if (closes && now > closes.getTime()) return `Closed ${closes.toLocaleString()}.`;
+  if (closes && now > closes.getTime())
+    return `Closed ${closes.toLocaleString()}.`;
   return "This room is not open right now.";
 }

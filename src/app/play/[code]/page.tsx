@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Loader2 } from "lucide-react";
+import { LoadingState } from "@/components/ui/loading-state";
 import { Player } from "@/components/live/player";
 
 export const metadata = { title: "Play - quizza" };
@@ -18,7 +18,7 @@ export default function PlayPage({
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center bg-paper">
-          <Loader2 className="size-8 animate-spin text-grape" />
+          <LoadingState label="Finding your people…" />
         </div>
       }
     >

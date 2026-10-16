@@ -67,6 +67,14 @@ export const OPTION_COLORS = [
   "lime",
 ] as const;
 export type OptionColor = (typeof OPTION_COLORS)[number];
+export const COLOR_TEXT: Record<OptionColor, string> = {
+  grape: "text-white",
+  coral: "text-ink",
+  sky: "text-ink",
+  mint: "text-ink",
+  sun: "text-ink",
+  lime: "text-ink",
+};
 
 /** Tailwind background classes per palette key (kept static so JIT picks them up). */
 export const COLOR_BG: Record<OptionColor, string> = {
@@ -80,11 +88,12 @@ export const COLOR_BG: Record<OptionColor, string> = {
 
 /** Themes a quiz can wear (drives the player and host accent). */
 export const THEMES = [
-  { key: "grape", label: "Grape", swatch: "bg-grape" },
-  { key: "coral", label: "Coral", swatch: "bg-coral" },
-  { key: "mint", label: "Mint", swatch: "bg-mint" },
-  { key: "sky", label: "Sky", swatch: "bg-sky" },
-  { key: "sun", label: "Sun", swatch: "bg-sun" },
+  { key: "grape", label: "After-school club", swatch: "bg-grape" },
+  { key: "coral", label: "Pink lemonade", swatch: "bg-coral" },
+  { key: "mint", label: "Field notes", swatch: "bg-mint" },
+  { key: "sky", label: "Blue-sky thinking", swatch: "bg-sky" },
+  { key: "sun", label: "Golden hour", swatch: "bg-sun" },
+  { key: "lime", label: "Fresh squeeze", swatch: "bg-lime" },
 ] as const;
 
 /**
@@ -104,12 +113,18 @@ export const COVER_ICONS = [
   "star",
   "flask",
   "gamepad",
+  "globe",
+  "music",
+  "book",
+  "code",
+  "food",
+  "leaf",
 ] as const;
 export type CoverIcon = (typeof COVER_ICONS)[number];
 
 export const DEFAULTS = {
   timeLimitSec: 20,
-  points: 1000,
+  points: 100,
   optionsPerQuestion: 4,
   maxOptions: 8,
   scaleMin: 1,

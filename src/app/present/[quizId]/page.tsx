@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { LoadingState } from "@/components/ui/loading-state";
 import { getQuizForEdit } from "@/lib/actions/quiz";
 import { getCurrentUser } from "@/lib/auth";
 import { Navbar } from "@/components/site/navbar";
@@ -15,7 +15,11 @@ async function Loaded({ quizId }: { quizId: string }) {
   if (!quiz) notFound();
   if (quiz.ownerId && quiz.ownerId !== user.id) redirect("/dashboard");
   return (
-    <Launch quizId={quiz.id} title={quiz.title} questionCount={quiz.questions.length} />
+    <Launch
+      quizId={quiz.id}
+      title={quiz.title}
+      questionCount={quiz.questions.length}
+    />
   );
 }
 
@@ -33,7 +37,7 @@ export default function PresentPage({
     <>
       <Navbar />
       <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-dots px-5 py-12">
-        <Suspense fallback={<Loader2 className="size-8 animate-spin text-grape" />}>
+        <Suspense fallback={<LoadingState label="Warming up your room…" />}>
           <Resolver params={params} />
         </Suspense>
       </main>

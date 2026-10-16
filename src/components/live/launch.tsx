@@ -29,7 +29,7 @@ export function Launch({
   questionCount: number;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("scheduled");
+  const [mode, setMode] = useState<Mode>("live");
   const [opensAt, setOpensAt] = useState(localValue(0));
   const [closesAt, setClosesAt] = useState(localValue(4));
   const [session, setSession] = useState<SessionCreated | null>(null);
@@ -59,7 +59,11 @@ export function Launch({
       }
       setSession(created);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not create the session");
+      setError(
+        err instanceof ApiClientError
+          ? `${err.message}${Array.isArray(err.details) ? `: ${err.details.filter((detail) => typeof detail === "string").join(" ")}` : ""}`
+          : "Could not create the session",
+      );
     } finally {
       setBusy(false);
     }
@@ -75,32 +79,39 @@ export function Launch({
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-lg rounded-3xl border-2 border-ink bg-paper p-7 shadow-pop-lg"
     >
-      <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">{title}</h1>
+      <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
+        {title}
+      </h1>
       <p className="mt-1 text-ink-soft">
         {questionCount} {questionCount === 1 ? "question" : "questions"}
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
+      <h2 className="mt-6 font-display text-xl font-bold">
+        How are we playing?
+      </h2>
+      <div className="mt-3 grid grid-cols-2 gap-3">
         <ModeCard
           active={mode === "scheduled"}
           onClick={() => setMode("scheduled")}
           icon={<Calendar className="size-5" />}
           label="Scheduled"
-          blurb="Open for a window, self-paced"
+          blurb="Their time, their pace. Set an open window."
         />
         <ModeCard
           active={mode === "live"}
           onClick={() => setMode("live")}
           icon={<Radio className="size-5" />}
           label="Live"
-          blurb="Host-driven, in sync"
+          blurb="One room, one timer. Reveal together."
         />
       </div>
 
       {mode === "scheduled" ? (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="font-display text-sm font-bold text-ink-soft">Opens</span>
+            <span className="font-display text-sm font-bold text-ink-soft">
+              Opens
+            </span>
             <input
               type="datetime-local"
               value={opensAt}
@@ -109,7 +120,9 @@ export function Launch({
             />
           </label>
           <label className="block">
-            <span className="font-display text-sm font-bold text-ink-soft">Closes</span>
+            <span className="font-display text-sm font-bold text-ink-soft">
+              Closes
+            </span>
             <input
               type="datetime-local"
               value={closesAt}
@@ -120,7 +133,9 @@ export function Launch({
         </div>
       ) : (
         <p className="mt-5 rounded-2xl border-2 border-dashed border-ink/20 p-4 text-center text-sm text-ink-soft">
-          Live sessions get a room code now. The live presenter screen is coming next.
+          Welcome everyone into the lobby. Players lock in privately; answers
+          reveal together when each timer ends. You decide when to start the
+          next round.
         </p>
       )}
 
@@ -147,7 +162,11 @@ export function Launch({
           disabled={busy || noQuestions}
           className="flex h-12 flex-1 items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
         >
-          {busy ? "Creating" : "Launch"}
+          {busy
+            ? "Opening…"
+            : mode === "live"
+              ? "Open live lobby"
+              : "Schedule quiz"}
         </button>
       </div>
     </motion.div>
@@ -170,6 +189,7 @@ function ModeCard({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "rounded-2xl border-2 p-4 text-left transition-transform hover:-translate-y-0.5",
         active ? "border-ink bg-white shadow-pop" : "border-ink/20 bg-paper-2",
@@ -178,15 +198,26 @@ function ModeCard({
       <span className="flex size-10 items-center justify-center rounded-xl border-2 border-ink bg-grape text-white">
         {icon}
       </span>
-      <span className="mt-2 block font-display font-bold text-ink">{label}</span>
+      <span className="mt-2 block font-display font-bold text-ink">
+        {label}
+      </span>
       <span className="block text-xs text-ink-soft">{blurb}</span>
     </button>
   );
 }
 
-function Created({ session, title }: { session: SessionCreated; title: string }) {
+function Created({
+  session,
+  title,
+}: {
+  session: SessionCreated;
+  title: string;
+}) {
   const [copied, setCopied] = useState(false);
-  const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/play/${session.code}` : "";
+  const joinUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/play/${session.code}`
+      : "";
 
   function copy() {
     navigator.clipboard?.writeText(joinUrl);
@@ -214,7 +245,11 @@ function Created({ session, title }: { session: SessionCreated; title: string })
         onClick={copy}
         className="mx-auto mt-6 flex items-center gap-2 rounded-xl border-2 border-ink bg-paper-2 px-4 py-2 font-display text-sm font-bold text-ink transition-transform hover:-translate-y-0.5"
       >
-        {copied ? <Check className="size-4 text-mint" /> : <Copy className="size-4" />}
+        {copied ? (
+          <Check className="size-4 text-mint" />
+        ) : (
+          <Copy className="size-4" />
+        )}
         {copied ? "Copied" : "Copy join link"}
       </button>
 

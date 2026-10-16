@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { authSecret } from "./auth-secret";
 
 /**
  * Signed per-question view token. Issued when a scheduled-mode player opens a
@@ -6,10 +7,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * token carries a server timestamp; on submit the server computes the elapsed
  * time from it, which makes the speed bonus non-gameable in self-paced play.
  */
-const SECRET = process.env.AUTH_SECRET || "dev-insecure-secret-change-me";
 
 function b64url(buf: Buffer): string {
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return buf
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 export function signViewToken(
@@ -19,7 +23,7 @@ export function signViewToken(
   issuedAt: number = Date.now(),
 ): string {
   const payload = `${sessionId}.${questionId}.${participantId}.${issuedAt}`;
-  const mac = createHmac("sha256", SECRET).update(payload).digest();
+  const mac = createHmac("sha256", authSecret()).update(payload).digest();
   return `${b64url(Buffer.from(payload))}.${b64url(mac)}`;
 }
 
@@ -34,22 +38,34 @@ export function verifyViewToken(
   if (parts.length !== 2) return null;
   let payload: string;
   try {
-    payload = Buffer.from(parts[0].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString();
+    payload = Buffer.from(
+      parts[0].replace(/-/g, "+").replace(/_/g, "/"),
+      "base64",
+    ).toString();
   } catch {
     return null;
   }
-  const expectedMac = createHmac("sha256", SECRET).update(payload).digest();
+  const expectedMac = createHmac("sha256", authSecret())
+    .update(payload)
+    .digest();
   let givenMac: Buffer;
   try {
-    givenMac = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    givenMac = Buffer.from(
+      parts[1].replace(/-/g, "+").replace(/_/g, "/"),
+      "base64",
+    );
   } catch {
     return null;
   }
-  if (givenMac.length !== expectedMac.length || !timingSafeEqual(givenMac, expectedMac)) {
+  if (
+    givenMac.length !== expectedMac.length ||
+    !timingSafeEqual(givenMac, expectedMac)
+  ) {
     return null;
   }
   const [sid, qid, pid, t] = payload.split(".");
-  if (sid !== sessionId || qid !== questionId || pid !== participantId) return null;
+  if (sid !== sessionId || qid !== questionId || pid !== participantId)
+    return null;
   const issuedAt = Number(t);
   return Number.isFinite(issuedAt) ? issuedAt : null;
 }

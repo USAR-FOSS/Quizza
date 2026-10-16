@@ -15,13 +15,27 @@ export function NewQuizForm() {
   const [icon, setIcon] = useState<string>(COVER_ICONS[0]);
   const [theme, setTheme] = useState<string>(THEMES[0].key);
   const [pending, start] = useTransition();
+  const [error, setError] = useState("");
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || pending) return;
     start(async () => {
-      const id = await createQuiz({ title: title.trim(), coverIcon: icon, theme });
-      router.push(`/build/${id}`);
+      setError("");
+      try {
+        const id = await createQuiz({
+          title: title.trim(),
+          coverIcon: icon,
+          theme,
+        });
+        router.push(`/build/${id}`);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Couldn’t create your quiz. Try again.",
+        );
+      }
     });
   }
 
@@ -41,6 +55,7 @@ export function NewQuizForm() {
         Title
       </label>
       <input
+        aria-label="Quiz title"
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -48,6 +63,14 @@ export function NewQuizForm() {
         maxLength={120}
         className="mt-2 w-full rounded-2xl border-2 border-ink bg-paper-2 px-4 py-3 font-display text-xl font-bold text-ink placeholder:text-ink-soft/50 focus:bg-white focus:outline-none"
       />
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-grape-dark">
+          {error}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-ink-soft">
+        You can upload cover art and your own icon in the editor.
+      </p>
 
       <label className="mt-6 block font-display text-sm font-bold text-ink-soft">
         Cover icon
@@ -90,7 +113,12 @@ export function NewQuizForm() {
                 : "border-transparent bg-paper-2 text-ink-soft",
             )}
           >
-            <span className={cn("size-4 rounded-full border-2 border-ink", t.swatch)} />
+            <span
+              className={cn(
+                "size-4 rounded-full border-2 border-ink",
+                t.swatch,
+              )}
+            />
             {t.label}
           </button>
         ))}

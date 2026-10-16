@@ -51,6 +51,7 @@ export const SubmitAnswerBody = z
     elapsedMs: z.number().int().min(0).optional(),
     // server-issued per-question view token (scheduled mode) for honest timing
     viewToken: z.string().optional(),
+    powerup: z.enum(["double", "shield"]).optional(),
   })
   .describe("Submit one answer to a question");
 
@@ -71,9 +72,15 @@ export const QuizSummary = z.object({
   title: z.string(),
   coverIcon: z.string(),
   theme: z.string(),
+  coverImage: z.string().nullable().optional(),
+  iconImage: z.string().nullable().optional(),
 });
 
-export const participationEnum = z.enum(["anonymous", "one_per_device", "signed_in"]);
+export const participationEnum = z.enum([
+  "anonymous",
+  "one_per_device",
+  "signed_in",
+]);
 
 export const SessionPublic = z.object({
   id: z.string().uuid(),
@@ -84,6 +91,7 @@ export const SessionPublic = z.object({
   closesAt: z.string().nullable(),
   participantCount: z.number().int(),
   participation: participationEnum,
+  powerups: z.boolean(),
   quiz: QuizSummary,
 });
 
@@ -91,6 +99,7 @@ export const Participant = z.object({
   id: z.string().uuid(),
   nickname: z.string(),
   avatarColor: z.string(),
+  avatarUrl: z.string().nullable().optional(),
   // returned only at join; the client keeps this to reconnect and submit
   clientToken: z.string(),
 });
@@ -107,6 +116,7 @@ export const QuestionPublic = z.object({
   position: z.number().int(),
   type: questionTypeEnum,
   prompt: z.string(),
+  mediaUrl: z.string().nullable(),
   timeLimitSec: z.number().int(),
   points: z.number().int(),
   settings: z.record(z.string(), z.unknown()),
@@ -115,11 +125,14 @@ export const QuestionPublic = z.object({
 
 export const QuestionList = z.object({
   answered: z.array(z.string().uuid()),
+  usedPowerups: z.array(z.enum(["double", "shield"])),
   questions: z.array(QuestionPublic),
 });
 
-export const ViewToken = z.object({ viewToken: z.string() });
-
+export const ViewToken = z.object({
+  viewToken: z.string(),
+  startedAt: z.string(),
+});
 export const AnswerResult = z.object({
   accepted: z.literal(true),
   // whether correctness is revealed now (per the quiz's reveal policy)
@@ -129,10 +142,17 @@ export const AnswerResult = z.object({
   correctOptionId: z.string().uuid().nullable(),
 });
 
+export const ParticipantProgress = z.object({
+  answered: z.array(z.string().uuid()),
+  usedPowerups: z.array(z.enum(["double", "shield"])),
+  results: z.record(z.string(), AnswerResult),
+});
+
 export const LeaderboardEntry = z.object({
   participantId: z.string().uuid(),
   nickname: z.string(),
   avatarColor: z.string(),
+  avatarUrl: z.string().nullable().optional(),
   score: z.number().int(),
   rank: z.number().int(),
 });
@@ -168,6 +188,7 @@ export const ControlBody = z
   .describe("Host control action for a live session");
 
 export const Ok = z.object({ ok: z.literal(true) });
+export const UploadCreated = z.object({ url: z.string() });
 
 export const ApiError = z.object({
   error: z.object({
@@ -187,12 +208,15 @@ export const apiSchemas = {
   Participant,
   QuestionPublic,
   QuestionList,
+  ViewToken,
+  ParticipantProgress,
   AnswerResult,
   LeaderboardEntry,
   QuestionStats,
   Results,
   ControlBody,
   Ok,
+  UploadCreated,
   ApiError,
 } as const;
 
