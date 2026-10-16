@@ -1,0 +1,417 @@
+# System Design Document (SDD)
+
+Status: living document. Owner: engineering. Audience: contributors and
+reviewers. For the reasoning behind specific choices see
+[decisions.md](./decisions.md); for storage detail see
+[data-dictionary.md](./data-dictionary.md); for security analysis see
+[threat-model.md](./threat-model.md).
+
+## 1. Purpose and scope
+
+quizza is a free and open-source platform for running live and scheduled
+quizzes, a FOSS alternative to Mentimeter and similar tools. The first operator
+is UFC at GGSIPU East campus, extending to other clubs and colleges and then to
+anyone who wants to host a quiz or test. This document specifies the system
+architecture, the major components and their boundaries, the main runtime
+workflows, the data flows, and the non-functional requirements.
+
+Source requirements: [PRD.md](../PRD.md).
+
+## 2. Goals and non-goals
+
+Goals:
+
+- Anonymous participation: join with a nickname and an avatar, no account.
+- Host accounts via FOSSClub OIDC or email and password.
+- Build quizzes with multiple question types, per-question time and points.
+- Run a quiz live (host-driven, synchronized) or scheduled (open for a window,
+  self-paced), recording accuracy and response time either way.
+- Results and leaderboards ranked by accuracy and speed.
+- A clean, smooth UI.
+
+Non-goals for the near term (tracked as roadmap, not dropped): powerups,
+in-question multimedia pipelines, quests, and horizontal multi-region scale.
+
+## 3. Context (C4 level 1)
+
+```mermaid
+flowchart TB
+  participant([Participant<br/>anonymous])
+  host([Host<br/>club organizer])
+  admin([Admin<br/>platform operator])
+  srv([Server Host<br/>infra operator])
+
+  subgraph sys[quizza]
+    app[quizza application]
+  end
+
+  oidc[(FOSSClub OIDC<br/>oidc.fossclub.tech)]
+
+  participant -->|joins, answers| app
+  host -->|builds, runs, reviews| app
+  admin -->|moderates, recovers| app
+  srv -->|deploys, operates| app
+  app -->|sign-in, auth code + PKCE| oidc
+```
+
+Actors:
+
+- Participant: joins a quiz and answers questions. No account required.
+- Host: creates quizzes, runs or schedules them, reviews results. Signs in.
+- Admin: platform operator with elevated control and a recovery path.
+- Server Host: operates the infrastructure (deploy, backups, scaling).
+
+## 4. Containers (C4 level 2)
+
+```mermaid
+flowchart TB
+  browser[Browser<br/>builder, presenter, player]
+
+  subgraph node[Node.js runtime]
+    web[Next.js app<br/>RSC pages + server actions]
+    api[REST API /api/v1<br/>route handlers]
+    sse[SSE endpoint<br/>server to client stream]
+    bus[In-process pub/sub bus]
+  end
+
+  db[(PostgreSQL 16)]
+  oidc[(FOSSClub OIDC)]
+  store[(Object storage<br/>media, roadmap)]
+
+  browser -->|HTTP| web
+  browser -->|HTTP JSON| api
+  browser -->|EventSource| sse
+  web --> db
+  api --> db
+  api --> bus
+  bus --> sse
+  web -->|OIDC| oidc
+  api -.->|media refs| store
+```
+
+Containers:
+
+- Next.js application (single deployable): server-rendered pages, the builder,
+  the presenter and player UIs, server actions for internal builder CRUD, the
+  versioned REST API under `/api/v1`, and the SSE endpoint. Runs on the Node.js
+  runtime (not edge) so the in-process bus and streaming work.
+- PostgreSQL: the system of record.
+- FOSSClub OIDC: external identity provider for hosts.
+- Object storage (roadmap): media for questions.
+
+Scale-out note: at the PRD target the app runs as multiple instances behind a
+load balancer, with the in-process bus replaced by a shared backplane. See
+section 9.
+
+## 5. Components (C4 level 3)
+
+```mermaid
+flowchart LR
+  subgraph ui[UI]
+    builder[Builder]
+    presenter[Presenter]
+    player[Player]
+    landing[Landing + join]
+  end
+
+  subgraph apilayer[API layer src/lib/api]
+    schemas[zod schemas]
+    http[http helpers]
+    openapi[openapi builder]
+  end
+
+  subgraph domain[Domain src/lib]
+    sessions[sessions.ts]
+    scoring[scoring.ts]
+    actions[actions/quiz.ts]
+    realtime[realtime bus]
+    codes[codes.ts]
+  end
+
+  subgraph data[Data src/lib/db]
+    schema[schema.ts]
+    client[db client]
+  end
+
+  builder --> actions
+  presenter --> sessions
+  player --> sessions
+  landing --> sessions
+  sessions --> scoring
+  sessions --> schema
+  actions --> schema
+  sessions --> realtime
+  schemas --> openapi
+  http --> sessions
+  schema --> client
+```
+
+Component responsibilities:
+
+- API layer (`src/lib/api`): zod request and response schemas, HTTP helpers
+  (validation, typed errors, the handler wrapper), and the OpenAPI 3.1 builder
+  that generates the spec from those same schemas.
+- Domain (`src/lib`): `sessions.ts` holds session lifecycle, join, questions,
+  answer submission, and results; `scoring.ts` is pure scoring; `actions/quiz.ts`
+  is builder CRUD via server actions; `realtime` is the pub/sub bus; `codes.ts`
+  generates join codes and tokens.
+- Data (`src/lib/db`): Drizzle schema, client, migrations, and client-safe type
+  mirrors.
+
+## 6. Technology stack
+
+| Layer | Choice | Reason (ADR) |
+|-------|--------|--------------|
+| Framework | Next.js 16, App Router, React 19 | 0001 |
+| Language | TypeScript | 0001 |
+| Styling | Tailwind CSS v4 | 0004 |
+| Animation | motion (Framer Motion) | 0004 |
+| ORM | Drizzle | 0002 |
+| Database | PostgreSQL 16 | 0002 |
+| Validation | zod | 0011 |
+| API docs | OpenAPI 3.1 + Scalar | 0011 |
+| Realtime | SSE + request/response | 0009 |
+| Auth | FOSSClub OIDC + email/password | 0012, 0014 |
+
+## 7. Key workflows
+
+### 7.1 Create and schedule a quiz
+
+```mermaid
+sequenceDiagram
+  actor Host
+  participant Web as Next.js (actions)
+  participant DB as Postgres
+  Host->>Web: create quiz (title, cover, theme)
+  Web->>DB: insert quizzes
+  Host->>Web: add questions and options (autosave)
+  Web->>DB: insert/update questions, options
+  Host->>Web: POST /api/v1/sessions (mode=scheduled, opensAt, closesAt)
+  Web->>DB: insert sessions (status=active, window set)
+  Web-->>Host: code + hostToken
+```
+
+### 7.2 Scheduled (self-paced) play
+
+```mermaid
+sequenceDiagram
+  actor P as Participant
+  participant API
+  participant DB as Postgres
+  P->>API: POST /sessions/{code}/participants (nickname)
+  API->>DB: insert participant
+  API-->>P: clientToken
+  P->>API: GET /sessions/{code}/questions (x-client-token)
+  API->>DB: read quiz questions (no correct answers)
+  API-->>P: questions
+  loop each question
+    P->>API: POST /sessions/{code}/answers (optionId/text/number, elapsedMs)
+    API->>API: compute correctness + points (scoring.ts)
+    API->>DB: insert answer (unique per question+participant), update score
+    API-->>P: isCorrect, pointsAwarded, correctOptionId
+  end
+  P->>API: GET /sessions/{code}/results
+  API-->>P: leaderboard + aggregates
+```
+
+### 7.3 Live (host-driven) play
+
+```mermaid
+sequenceDiagram
+  actor Host
+  actor P as Participants
+  participant API
+  participant Bus as pub/sub
+  participant SSE
+  participant DB as Postgres
+  Host->>API: create session (mode=live)
+  P->>API: join (nickname) -> clientToken
+  P->>SSE: subscribe EventSource /sessions/{code}/stream
+  Host->>API: advance to question N
+  API->>DB: set current_question_id, question_started_at
+  API->>Bus: publish snapshot (question N)
+  Bus->>SSE: deliver to all players
+  P->>API: submit answer
+  API->>DB: insert answer, update score
+  API->>Bus: host tick (answer count) [host connection only]
+  Host->>API: reveal
+  API->>Bus: publish snapshot (results + correct answer)
+  Bus->>SSE: deliver to all
+```
+
+## 8. State and data flows
+
+### 8.1 Session lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> lobby: create (live)
+  lobby --> active: host starts
+  active --> active: next question
+  active --> ended: host ends
+  [*] --> active: create (scheduled)
+  active --> ended: window closes
+  ended --> [*]
+```
+
+Live sessions move `lobby -> active -> ended` under host control, with
+`current_question_id` and `question_started_at` tracking the live cursor.
+Scheduled sessions are created `active`; effective openness is computed from
+`opens_at` and `closes_at`, and the run is considered ended after the window.
+
+### 8.2 Answer and scoring flow
+
+An answer is validated against the question type, correctness is computed
+server-side from the stored options, response time is taken from the server
+clock (live) or a clamped client report (scheduled), and points come from
+`scoring.ts`. The client never supplies correctness or points. One answer per
+participant per question is enforced by a unique index.
+
+## 9. Non-functional requirements
+
+### 9.1 Operating target
+
+The realistic target the system must run stably against (ADR 0018):
+
+- Audience: 1000 to 2000 participants in an event.
+- Workload per participant: about 30 submissions, while actively taking the quiz
+  for 30 to 45 minutes.
+- Event window: up to 4 hours, within which participants start and finish at
+  their own pace (primarily scheduled mode).
+- Must run stably for the full window with smooth UI and no degradation.
+
+The earlier PRD figure (10 parallel quizzes of 1000) is treated as an aspiration,
+not the near-term target; see ADR 0015 for the contingency plan if it is ever
+needed.
+
+### 9.2 Load analysis
+
+- Total writes: 2000 x 30 = 60,000 submissions across the event.
+- Spread across the 4-hour window: about 4 submissions per second average.
+- Worst realistic clustering (all active within the same 45-minute block): about
+  22 per second average, roughly 50 to 70 per second at peak.
+- Scheduled mode is request/response, so there are no long-lived connections;
+  2000 participants are ordinary web traffic, not 2000 held-open streams.
+- A live room of this size is the only case with held-open SSE connections (1000
+  to 2000) and a synchronized submit burst (a few hundred per second for a few
+  seconds when a question closes).
+
+### 9.3 Design response
+
+- Single instance is sufficient for this target. One Node process holds 1000 to
+  2000 SSE connections comfortably, and Postgres absorbs tens to a few hundred
+  small indexed inserts per second with headroom.
+- Connection pool: a modest pool (around 15 to 20 connections) covers the live
+  burst, since each insert completes in a few milliseconds. No external pooler is
+  required at this scale.
+- Stability over 4 hours is the real requirement: SSE streams must be
+  unsubscribed and cleaned up on disconnect, no unbounded in-memory growth, and
+  idle timeouts on streams. These are correctness concerns, not capacity ones.
+- Fan-out discipline (already decided): phase changes broadcast one snapshot to
+  all; live answer counts go only to the presenter connection; never rebroadcast
+  per answer to all players.
+- Contingency only: if a future event exceeds this target, scale out per ADR
+  0015 (horizontal instances, a `LISTEN/NOTIFY` or Redis backplane behind the bus
+  interface, a Postgres pooler). This is designed but deliberately not built,
+  because the operating target does not need it.
+
+## 10. Feature scope and phasing
+
+MVP (in progress):
+
+- Builder with six question types, per-question time and points (done).
+- REST API with OpenAPI (done).
+- Scheduled mode UI and live mode UI (next).
+- Host sign-in (OIDC and email/password) and quiz ownership.
+- Results with ranking by accuracy and speed; per-question leaderboard.
+
+Post-MVP (roadmap, data model has extension points):
+
+- Powerups (shield, attack, hint) with a catalog and a per-participant ledger.
+- In-question multimedia with object storage.
+- Custom participant data fields collected by the host at join.
+- Quests and other engagement mechanics.
+- Cheat prevention hardening (see threat model).
+
+## 11. Deployment view
+
+### 11.1 Target deployment (single instance)
+
+This is the deployment for the operating target in section 9. It is the default
+and the only one needed for 1000 to 2000 participants.
+
+```mermaid
+flowchart TB
+  proxy[Reverse proxy<br/>TLS, HTTP/2, no SSE buffering]
+  subgraph container[Docker container]
+    app[quizza<br/>standalone Next server, in-process bus]
+  end
+  db[(PostgreSQL 16)]
+  proxy --> app --> db
+```
+
+- The app ships as a Docker image: a multi-stage build producing Next's
+  standalone server (ADR 0019). The single-instance target is one app container
+  plus Postgres. `docker compose up --build` starts Postgres, runs migrations
+  once, then starts the app.
+- The pub/sub bus is in-process; no pooler and no backplane are required at this
+  target.
+- The reverse proxy must disable response buffering for the SSE route (for
+  example `X-Accel-Buffering: no`) and use HTTP/2 so streams multiplex per
+  client.
+- Give the Postgres pool headroom (around 15 to 20 connections) for live submit
+  bursts.
+- Migrations run as a one-shot `migrate` service (compose) before the app
+  starts, or manually with `pnpm db:generate` then `pnpm db:migrate`. See ADR
+  0003.
+- Scaling later is a replica-count change: run N app containers behind the load
+  balancer and switch the bus to the shared backplane (section 11.2, ADR 0015).
+
+### 11.2 Contingency deployment (scaled out)
+
+Only if a future event exceeds the operating target. Not required today; built
+only when the numbers demand it. See ADR 0015.
+
+```mermaid
+flowchart TB
+  lb[Load balancer / reverse proxy<br/>TLS, HTTP/2, no SSE buffering]
+  subgraph instances[App instances]
+    a1[quizza instance 1]
+    a2[quizza instance 2]
+    an[quizza instance N]
+  end
+  pooler[PgBouncer]
+  db[(PostgreSQL 16)]
+  backplane[(LISTEN/NOTIFY or Redis)]
+
+  lb --> a1 & a2 & an
+  a1 & a2 & an --> pooler --> db
+  a1 & a2 & an --> backplane
+```
+
+## 12. Risks and open questions
+
+- Scheduled-mode response time currently relies on a client-reported elapsed
+  time, which is clampable but not fully trustworthy. A server-issued per-
+  question view token with a timestamp would make it authoritative (threat
+  model, Tampering).
+- Join codes are six digits. They authorize only participant actions, never host
+  control, but brute force and join flooding need rate limiting at scale.
+- Quiz ownership checks depend on host auth, which is not yet implemented; until
+  then a quiz link grants edit access (acceptable pre-release only).
+- NOTIFY throughput at the high end is unproven for this workload; Redis is the
+  documented fallback.
+
+## 13. References and inspirations
+
+Design and feature inspirations to study:
+
+- Kahoot and Mentimeter: live, host-driven play and audience interaction.
+- buzzr.in: lightweight, fast quiz hosting.
+- quizmaster: quiz and test flows.
+- allourideas: pairwise voting and idea prioritization, a useful model for poll
+  and ranking formats.
+
+Future scale direction (ADR 0020): the high-throughput realtime and submission
+tier may later move to a dedicated Go backend for resource efficiency at very
+large scale. Direction note only; not built now.

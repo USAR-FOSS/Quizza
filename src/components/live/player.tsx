@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, X, Clock, Radio, Trophy, Loader2 } from "lucide-react";
+import { Check, X, Clock, Radio, Trophy, Loader2, LogIn } from "lucide-react";
 import {
   api,
   ApiClientError,
@@ -28,6 +29,7 @@ type Phase =
   | "notfound"
   | "live-unsupported"
   | "closed"
+  | "signin"
   | "join"
   | "intro"
   | "question"
@@ -46,6 +48,7 @@ export function Player({ code }: { code: string }) {
   const [results, setResults] = useState<Results | null>(null);
   const [note, setNote] = useState<string>("");
   const [live, setLive] = useState(false);
+  const [viewToken, setViewToken] = useState<string | undefined>(undefined);
 
   // load session, then decide the entry phase
   useEffect(() => {
@@ -125,10 +128,33 @@ export function Player({ code }: { code: string }) {
       localStorage.setItem(storeKey(code), JSON.stringify(identity));
       setMe(identity);
       await loadQuestions(identity.clientToken);
-    } catch {
-      setPhase("closed");
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "signin_required") {
+        setPhase("signin");
+      } else if (err instanceof ApiClientError && err.code === "session_not_open") {
+        setPhase("closed");
+      } else {
+        setPhase("closed");
+      }
     }
   }
+
+  // fetch a server-timestamped view token when a question is shown, so response
+  // time is anchored on the server (not the client clock).
+  useEffect(() => {
+    if (phase !== "question" || !me || !questions[index]) return;
+    let alive = true;
+    setViewToken(undefined);
+    api
+      .getViewToken(code, questions[index].id, me.clientToken)
+      .then((r) => {
+        if (alive) setViewToken(r.viewToken);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [phase, index, me, questions, code]);
 
   async function submit(payload: {
     optionId?: string;
@@ -142,6 +168,7 @@ export function Player({ code }: { code: string }) {
       const result = await api.submitAnswer(code, {
         questionId: q.id,
         clientToken: me.clientToken,
+        viewToken,
         ...payload,
       });
       setLastResult(result);
@@ -204,6 +231,33 @@ export function Player({ code }: { code: string }) {
               title="Not open right now"
               body={windowText(session)}
             />
+          )}
+
+          {phase === "signin" && (
+            <motion.div
+              key="signin"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-8 text-center shadow-pop-lg"
+            >
+              <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl border-2 border-ink bg-paper-2">
+                <LogIn className="size-8 text-ink" />
+              </div>
+              <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
+                Sign in to play
+              </h1>
+              <p className="mt-2 text-ink-soft">
+                This quiz allows one attempt per person, so it needs you signed in.
+              </p>
+              <Link
+                href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}
+                className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-grape px-6 font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5"
+              >
+                <LogIn className="size-5" />
+                Sign in
+              </Link>
+            </motion.div>
           )}
 
           {phase === "join" && (

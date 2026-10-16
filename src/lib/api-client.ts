@@ -145,6 +145,12 @@ export const api = {
       { headers: { "x-client-token": clientToken } },
     ),
 
+  getViewToken: (code: string, questionId: string, clientToken: string) =>
+    request<{ viewToken: string }>(
+      `/sessions/${code}/questions/${questionId}/view`,
+      { headers: { "x-client-token": clientToken } },
+    ),
+
   submitAnswer: (
     code: string,
     body: {
@@ -154,6 +160,7 @@ export const api = {
       textValue?: string;
       numberValue?: number;
       elapsedMs?: number;
+      viewToken?: string;
     },
   ) =>
     request<AnswerResult>(`/sessions/${code}/answers`, {
@@ -161,7 +168,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getResults: (code: string) => request<Results>(`/sessions/${code}/results`),
+  getResults: (code: string, hostToken?: string) =>
+    request<Results>(`/sessions/${code}/results`, {
+      headers: hostToken ? { authorization: `Bearer ${hostToken}` } : {},
+    }),
 
   control: (code: string, hostToken: string, action: "start" | "reveal" | "next" | "end") =>
     request<{ ok: true }>(`/sessions/${code}/control`, {
@@ -179,3 +189,4 @@ export const api = {
     return `${BASE}/sessions/${code}/stream?${q}`;
   },
 };
+
