@@ -13,6 +13,7 @@ import {
 } from "@/lib/api-client";
 import { OPTION_COLORS, COLOR_BG, type OptionColor } from "@/lib/quiz-constants";
 import { Avatar } from "@/components/ui/avatar";
+import { LivePlayer } from "@/components/live/live-player";
 import { cn } from "@/lib/utils";
 
 type Identity = {
@@ -44,6 +45,7 @@ export function Player({ code }: { code: string }) {
   const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [note, setNote] = useState<string>("");
+  const [live, setLive] = useState(false);
 
   // load session, then decide the entry phase
   useEffect(() => {
@@ -54,7 +56,7 @@ export function Player({ code }: { code: string }) {
         if (!alive) return;
         setSession(s);
         if (s.mode === "live") {
-          setPhase("live-unsupported");
+          setLive(true);
           return;
         }
         const stored = localStorage.getItem(storeKey(code));
@@ -172,6 +174,8 @@ export function Player({ code }: { code: string }) {
   }
 
   const accent = session?.quiz.theme ?? "grape";
+
+  if (live) return <LivePlayer code={code} />;
 
   return (
     <div className="flex min-h-screen flex-col bg-paper bg-dots">

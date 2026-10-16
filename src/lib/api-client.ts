@@ -162,4 +162,20 @@ export const api = {
     }),
 
   getResults: (code: string) => request<Results>(`/sessions/${code}/results`),
+
+  control: (code: string, hostToken: string, action: "start" | "reveal" | "next" | "end") =>
+    request<{ ok: true }>(`/sessions/${code}/control`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${hostToken}` },
+      body: JSON.stringify({ action }),
+    }),
+
+  /** URL for an EventSource connection. Host or player auth goes in the query,
+   * since EventSource cannot send headers. */
+  streamUrl: (code: string, auth: { host?: string; player?: string }) => {
+    const q = auth.host
+      ? `host=${encodeURIComponent(auth.host)}`
+      : `player=${encodeURIComponent(auth.player ?? "")}`;
+    return `${BASE}/sessions/${code}/stream?${q}`;
+  },
 };

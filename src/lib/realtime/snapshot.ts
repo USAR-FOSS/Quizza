@@ -1,0 +1,134 @@
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  answers,
+  options,
+  participants,
+  questions,
+  quizzes,
+  sessions,
+} from "@/lib/db/schema";
+import { publish } from "./bus";
+import type {
+  HostSnapshot,
+  LiveLeaderboardEntry,
+  LivePhase,
+  PlayerSnapshot,
+  RevealTally,
+} from "./events";
+
+/** Builds the player and host snapshots for a session's current state. */
+export async function buildSnapshots(
+  sessionId: string,
+): Promise<{ player: PlayerSnapshot; host: HostSnapshot }> {
+  const [s] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+  if (!s) {
+    const empty: PlayerSnapshot = {
+      phase: "ended",
+      quiz: { title: "", theme: "grape" },
+      participantCount: 0,
+      question: null,
+      reveal: null,
+      leaderboard: [],
+    };
+    return { player: empty, host: { ...empty, answeredCount: 0, correctOptionId: null } };
+  }
+
+  const quiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, s.quizId),
+    with: {
+      questions: {
+        orderBy: asc(questions.position),
+        with: { options: { orderBy: asc(options.position) } },
+      },
+    },
+  });
+  const qs = quiz?.questions ?? [];
+
+  const parts = await db
+    .select()
+    .from(participants)
+    .where(eq(participants.sessionId, sessionId))
+    .orderBy(desc(participants.score), asc(participants.joinedAt));
+
+  const leaderboard: LiveLeaderboardEntry[] = parts.map((p, i) => ({
+    participantId: p.id,
+    nickname: p.nickname,
+    avatarColor: p.avatarColor,
+    score: p.score,
+    rank: i + 1,
+  }));
+
+  let phase: LivePhase;
+  if (s.status === "ended") phase = "ended";
+  else if (s.status === "lobby" || !s.currentQuestionId) phase = "lobby";
+  else phase = s.revealed ? "reveal" : "question";
+
+  const current = s.currentQuestionId
+    ? qs.find((q) => q.id === s.currentQuestionId) ?? null
+    : null;
+  const currentIndex = current ? qs.findIndex((q) => q.id === current.id) : -1;
+
+  let question: PlayerSnapshot["question"] = null;
+  let correctOptionId: string | null = null;
+  let tallies: RevealTally[] = [];
+  let totalAnswers = 0;
+  let answeredCount = 0;
+
+  if (current && (phase === "question" || phase === "reveal")) {
+    question = {
+      id: current.id,
+      type: current.type,
+      prompt: current.prompt,
+      timeLimitSec: current.timeLimitSec,
+      startedAt: s.questionStartedAt ? s.questionStartedAt.toISOString() : null,
+      index: currentIndex,
+      total: qs.length,
+      options: current.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
+    };
+    correctOptionId = current.options.find((o) => o.isCorrect)?.id ?? null;
+
+    const ans = await db
+      .select()
+      .from(answers)
+      .where(and(eq(answers.sessionId, sessionId), eq(answers.questionId, current.id)));
+    answeredCount = ans.length;
+    totalAnswers = ans.length;
+    const counts = new Map<string, number>();
+    for (const a of ans) if (a.optionId) counts.set(a.optionId, (counts.get(a.optionId) ?? 0) + 1);
+    tallies = current.options.map((o) => ({ optionId: o.id, count: counts.get(o.id) ?? 0 }));
+  }
+
+  // the player sees the tally and standings once a question is revealed or the
+  // session has ended; the host always sees everything.
+  let playerLeaderboard: LiveLeaderboardEntry[] = [];
+  if (phase === "lobby") playerLeaderboard = leaderboard; // the lobby roster
+  else if (phase === "reveal" || phase === "ended") playerLeaderboard = leaderboard;
+
+  const player: PlayerSnapshot = {
+    phase,
+    quiz: { title: quiz?.title ?? "", theme: quiz?.theme ?? "grape" },
+    participantCount: parts.length,
+    question,
+    reveal:
+      phase === "reveal"
+        ? { correctOptionId, tallies, totalAnswers }
+        : null,
+    leaderboard: playerLeaderboard,
+  };
+
+  const host: HostSnapshot = {
+    ...player,
+    leaderboard, // host always sees standings
+    answeredCount,
+    correctOptionId,
+  };
+
+  return { player, host };
+}
+
+/** Rebuilds and broadcasts the state to everyone in the session. */
+export async function publishState(sessionId: string): Promise<void> {
+  const { player, host } = await buildSnapshots(sessionId);
+  publish(sessionId, { kind: "state", player, host });
+}
