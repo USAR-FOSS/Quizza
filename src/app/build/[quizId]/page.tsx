@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { LoadingState } from "@/components/ui/loading-state";
 import { getQuizForEdit } from "@/lib/actions/quiz";
 import { getCurrentUser } from "@/lib/auth";
 import { Builder } from "@/components/builder/builder";
@@ -37,7 +37,7 @@ async function Resolver({ params }: { params: Promise<{ quizId: string }> }) {
 function BuilderSkeleton() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper-2">
-      <Loader2 className="size-8 animate-spin text-grape" />
+      <LoadingState label="Opening your question workshop…" />
     </div>
   );
 }

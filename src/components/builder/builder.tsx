@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Play, Check, Loader2, ListPlus, Settings2 } from "lucide-react";
+import { Play, Check, Loader2, ListPlus, Settings2, Eye } from "lucide-react";
 import { Logo } from "@/components/site/logo";
 import { QuestionSidebar } from "@/components/builder/question-sidebar";
 import { QuestionEditor } from "@/components/builder/question-editor";
 import { QuizMeta } from "@/components/builder/quiz-meta";
+import { QuizAppearance } from "@/components/builder/quiz-appearance";
 import { QuizSettingsPanel } from "@/components/builder/quiz-settings";
 import * as actions from "@/lib/actions/quiz";
 import type {
@@ -18,9 +20,10 @@ import type {
   QuizWithQuestions,
 } from "@/lib/db/schema-types";
 
-type SaveState = "idle" | "saving" | "saved";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function Builder({ initial }: { initial: QuizWithQuestions }) {
+  const router = useRouter();
   const [quiz, setQuiz] = useState<QuizWithQuestions>(initial);
   const [selectedId, setSelectedId] = useState<string | null>(
     initial.questions[0]?.id ?? null,
@@ -31,40 +34,98 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
   // per-key debounce timers for text fields
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef(new Map<string, () => Promise<unknown>>());
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const failed = useRef(false);
+  const failedKeys = useRef(new Set<string>());
+  const latestTasks = useRef(new Map<string, () => Promise<unknown>>());
+  const activeSaves = useRef(0);
+  const [saveError, setSaveError] = useState("");
 
-  const runSave = useCallback(async (fn: () => Promise<unknown>) => {
-    setSave("saving");
-    try {
-      await fn();
-      setSave("saved");
+  const runSave = useCallback(
+    async (fn: () => Promise<unknown>, key = `operation:${Math.random()}`) => {
+      latestTasks.current.set(key, fn);
+      activeSaves.current++;
+      setSave("saving");
       if (savedTimer.current) clearTimeout(savedTimer.current);
-      savedTimer.current = setTimeout(() => setSave("idle"), 1200);
-    } catch (err) {
-      console.error(err);
-      setSave("idle");
-    }
-  }, []);
+      const task = queue.current.catch(() => {}).then(fn);
+      queue.current = task;
+      try {
+        await task;
+        failedKeys.current.delete(key);
+        failed.current = failedKeys.current.size > 0;
+        if (!failed.current) setSaveError("");
+        if (
+          queue.current === task &&
+          pending.current.size === 0 &&
+          !failed.current
+        ) {
+          setSave("saved");
+          savedTimer.current = setTimeout(() => setSave("idle"), 1600);
+        }
+      } catch (err) {
+        if (latestTasks.current.get(key) !== fn) return;
+        failedKeys.current.add(key);
+        failed.current = true;
+        setSaveError(
+          err instanceof Error
+            ? err.message
+            : "Couldn’t save. Please retry before leaving.",
+        );
+        setSave("error");
+        pending.current.set(key, fn);
+      } finally {
+        activeSaves.current--;
+      }
+    },
+    [],
+  );
 
   const debounced = useCallback(
     (key: string, fn: () => Promise<unknown>, delay = 500) => {
       if (timers.current[key]) clearTimeout(timers.current[key]);
       setSave("saving");
-      timers.current[key] = setTimeout(() => void runSave(fn), delay);
+      pending.current.set(key, fn);
+      latestTasks.current.set(key, fn);
+      timers.current[key] = setTimeout(() => {
+        pending.current.delete(key);
+        void runSave(fn, key);
+      }, delay);
     },
     [runSave],
   );
+
+  async function flush() {
+    Object.values(timers.current).forEach(clearTimeout);
+    const tasks = [...pending.current.entries()];
+    pending.current.clear();
+    failed.current = false;
+    failedKeys.current.clear();
+    setSaveError("");
+    await Promise.all(tasks.map(([key, fn]) => runSave(fn, key)));
+    await queue.current.catch(() => {});
+    return !failed.current;
+  }
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (pending.current.size || failed.current || activeSaves.current)
+        event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
 
   /* ---------------- quiz meta ---------------- */
 
   function patchQuiz(patch: Partial<QuizWithQuestions>) {
     setQuiz((q) => ({ ...q, ...patch }));
-    debounced("quiz", () =>
-      actions.updateQuiz(quiz.id, {
-        title: patch.title,
-        coverIcon: patch.coverIcon,
-        theme: patch.theme,
-      }),
-    );
+    for (const [field, value] of Object.entries(patch))
+      debounced(`quiz:${field}`, () =>
+        actions.updateQuiz(quiz.id, {
+          [field]: value,
+        }),
+      );
   }
 
   function patchSettings(patch: Partial<QuizSettings>) {
@@ -94,14 +155,12 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
     patchQuestions(
       quiz.questions.map((q) => (q.id === questionId ? { ...q, ...patch } : q)),
     );
-    debounced(`q:${questionId}`, () =>
-      actions.updateQuestion(questionId, {
-        prompt: patch.prompt,
-        timeLimitSec: patch.timeLimitSec,
-        points: patch.points,
-        settings: patch.settings,
-      }),
-    );
+    for (const [field, value] of Object.entries(patch))
+      debounced(`q:${questionId}:${field}`, () =>
+        actions.updateQuestion(questionId, {
+          [field]: value,
+        }),
+      );
   }
 
   async function deleteQuestion(questionId: string) {
@@ -155,12 +214,12 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
       questionId,
       q.options.map((o) => (o.id === optionId ? { ...o, ...patch } : o)),
     );
-    debounced(`o:${optionId}`, () =>
-      actions.updateOption(optionId, {
-        label: patch.label,
-        color: patch.color,
-      }),
-    );
+    for (const [field, value] of Object.entries(patch))
+      debounced(`o:${optionId}:${field}`, () =>
+        actions.updateOption(optionId, {
+          [field]: value,
+        }),
+      );
   }
 
   function setCorrect(questionId: string, optionId: string) {
@@ -189,7 +248,11 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
     <div className="flex min-h-screen flex-col bg-paper-2">
       {/* top bar */}
       <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b-2 border-ink/10 bg-paper/90 px-4 backdrop-blur-md">
-        <Link href="/" className="shrink-0">
+        <Link
+          href="/dashboard"
+          className="hidden shrink-0 lg:block"
+          aria-label="Back to dashboard"
+        >
           <Logo className="h-7" />
         </Link>
 
@@ -200,8 +263,21 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
           onChange={patchQuiz}
         />
 
-        <div className="flex shrink-0 items-center gap-3">
-          <SaveBadge state={save} />
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <span className="hidden sm:block">
+            <SaveBadge state={save} />
+          </span>
+          <Link
+            href={`/preview/${quiz.id}`}
+            onClick={async (event) => {
+              event.preventDefault();
+              if (await flush()) router.push(`/preview/${quiz.id}`);
+            }}
+            aria-label="Preview as a participant"
+            className="inline-flex size-10 items-center justify-center rounded-xl border-2 border-ink bg-paper text-ink shadow-pop"
+          >
+            <Eye className="size-4" />
+          </Link>
           <button
             onClick={() => setSettingsOpen(true)}
             aria-label="Quiz settings"
@@ -211,13 +287,31 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
           </button>
           <Link
             href={`/present/${quiz.id}`}
+            onClick={async (event) => {
+              event.preventDefault();
+              if (await flush()) router.push(`/present/${quiz.id}`);
+            }}
             className="inline-flex h-10 items-center gap-2 rounded-xl border-2 border-ink bg-grape px-4 font-display text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
           >
             <Play className="size-4 fill-current" />
-            Present
+            Launch
           </Link>
         </div>
       </header>
+      {saveError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-center gap-3 border-b-2 border-coral bg-coral/10 p-3 text-sm font-semibold"
+        >
+          {saveError}
+          <button
+            onClick={() => void flush()}
+            className="underline underline-offset-4"
+          >
+            Retry saving
+          </button>
+        </div>
+      )}
 
       {settingsOpen && (
         <QuizSettingsPanel
@@ -239,10 +333,20 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
         />
 
         <main className="min-w-0 flex-1">
+          <QuizAppearance
+            quizId={quiz.id}
+            settings={quiz.settings}
+            theme={quiz.theme}
+            coverIcon={quiz.coverIcon}
+            onSettings={patchSettings}
+            onTheme={(theme) => patchQuiz({ theme })}
+            onIcon={(coverIcon) => patchQuiz({ coverIcon })}
+          />
           {selected ? (
             <QuestionEditor
               key={selected.id}
               question={selected}
+              speedBonus={quiz.settings.speedBonus}
               index={quiz.questions.findIndex((q) => q.id === selected.id)}
               onChange={(patch) => updateQuestion(selected.id, patch)}
               onAddOption={() => addOption(selected.id)}
@@ -269,7 +373,9 @@ function SaveBadge({ state }: { state: SaveState }) {
       animate={{ opacity: 1 }}
       className="hidden items-center gap-1.5 text-sm font-semibold text-ink-soft sm:flex"
     >
-      {state === "saving" ? (
+      {state === "error" ? (
+        "Not saved"
+      ) : state === "saving" ? (
         <>
           <Loader2 className="size-4 animate-spin" />
           Saving…

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { LoadingState } from "@/components/ui/loading-state";
 import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { NewQuizForm } from "@/components/builder/new-quiz-form";
@@ -19,7 +19,9 @@ export default function CreatePage() {
     <>
       <Navbar />
       <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-dots px-5 py-16">
-        <Suspense fallback={<Loader2 className="size-8 animate-spin text-grape" />}>
+        <Suspense
+          fallback={<LoadingState label="Making room for your next idea…" />}
+        >
           <Gate />
         </Suspense>
       </main>

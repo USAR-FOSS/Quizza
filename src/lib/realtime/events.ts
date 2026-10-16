@@ -16,6 +16,8 @@ export interface LiveQuestion {
   id: string;
   type: string;
   prompt: string;
+  mediaUrl: string | null;
+  settings: { scaleMin?: number; scaleMax?: number };
   timeLimitSec: number;
   startedAt: string | null;
   index: number; // 0-based position in the quiz
@@ -27,6 +29,7 @@ export interface LiveLeaderboardEntry {
   participantId: string;
   nickname: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   score: number;
   rank: number;
 }
@@ -37,14 +40,26 @@ export interface RevealTally {
 }
 
 export interface PlayerSnapshot {
+  serverNow?: number;
+  /** Set on receipt by the browser, not a scoring input. */
+  clockOffsetMs?: number;
   phase: LivePhase;
-  quiz: { title: string; theme: string };
+  quiz: {
+    title: string;
+    theme: string;
+    powerups?: boolean;
+    coverImage?: string | null;
+    iconImage?: string | null;
+    coverIcon?: string;
+  };
   participantCount: number;
   question: LiveQuestion | null;
   reveal: {
     correctOptionId: string | null;
     tallies: RevealTally[];
     totalAnswers: number;
+    textValues: string[];
+    numberAverage: number | null;
   } | null;
   leaderboard: LiveLeaderboardEntry[];
 }

@@ -7,12 +7,20 @@ import { useEffect, useState } from "react";
  * A `{ tick: n }` message is merged into the current snapshot as answeredCount,
  * so the host sees live answer counts without a full state rebuild.
  */
-export function useEventStream<T>(url: string | null): T | null {
+export function useEventStream<T>(url: string | null): {
+  data: T | null;
+  connection: "connecting" | "connected" | "reconnecting";
+} {
   const [data, setData] = useState<T | null>(null);
+  const [connection, setConnection] = useState<
+    "connecting" | "connected" | "reconnecting"
+  >("connecting");
 
   useEffect(() => {
     if (!url) return;
     const es = new EventSource(url);
+    es.onopen = () => setConnection("connected");
+    es.onerror = () => setConnection("reconnecting");
     es.onmessage = (e) => {
       try {
         const parsed = JSON.parse(e.data);
@@ -21,6 +29,8 @@ export function useEventStream<T>(url: string | null): T | null {
             prev ? ({ ...prev, answeredCount: parsed.tick } as T) : prev,
           );
         } else {
+          if (parsed && typeof parsed.serverNow === "number")
+            parsed.clockOffsetMs = parsed.serverNow - Date.now();
           setData(parsed as T);
         }
       } catch {
@@ -30,5 +40,5 @@ export function useEventStream<T>(url: string | null): T | null {
     return () => es.close();
   }, [url]);
 
-  return data;
+  return { data, connection };
 }

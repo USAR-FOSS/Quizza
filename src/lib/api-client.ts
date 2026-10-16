@@ -3,6 +3,8 @@
  * Shapes mirror the server zod schemas in src/lib/api/schemas.ts.
  */
 
+import type { Powerup } from "@/lib/powerups";
+
 export type SessionMode = "live" | "scheduled";
 export type SessionStatus = "lobby" | "active" | "ended";
 export type QuestionType =
@@ -24,7 +26,14 @@ export type SessionPublic = {
   closesAt: string | null;
   participantCount: number;
   participation: ParticipationMode;
-  quiz: { title: string; coverIcon: string; theme: string };
+  powerups: boolean;
+  quiz: {
+    title: string;
+    coverIcon: string;
+    theme: string;
+    coverImage?: string | null;
+    iconImage?: string | null;
+  };
 };
 
 export type SessionCreated = {
@@ -41,6 +50,7 @@ export type ParticipantCreated = {
   id: string;
   nickname: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   clientToken: string;
 };
 
@@ -56,6 +66,7 @@ export type QuestionPublic = {
   position: number;
   type: QuestionType;
   prompt: string;
+  mediaUrl: string | null;
   timeLimitSec: number;
   points: number;
   settings: Record<string, unknown>;
@@ -74,6 +85,7 @@ export type LeaderboardEntry = {
   participantId: string;
   nickname: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   score: number;
   rank: number;
 };
@@ -83,7 +95,12 @@ export type QuestionStats = {
   prompt: string;
   type: QuestionType;
   responses: number;
-  options: { optionId: string; label: string; count: number; isCorrect: boolean }[];
+  options: {
+    optionId: string;
+    label: string;
+    count: number;
+    isCorrect: boolean;
+  }[];
   textValues: string[];
   numberAverage: number | null;
 };
@@ -102,6 +119,7 @@ export class ApiClientError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public details?: unknown,
   ) {
     super(message);
   }
@@ -115,10 +133,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new ApiClientError(
+      res.status,
+      "invalid_response",
+      "The server could not complete the request. Please try again.",
+    );
+  }
   if (!res.ok) {
     const err = data?.error ?? {};
-    throw new ApiClientError(res.status, err.code ?? "error", err.message ?? "Request failed");
+    throw new ApiClientError(
+      res.status,
+      err.code ?? "error",
+      err.message ?? "Request failed",
+      err.details,
+    );
   }
   return data as T;
 }
@@ -129,9 +161,21 @@ export const api = {
     mode: SessionMode;
     opensAt?: string;
     closesAt?: string;
-  }) => request<SessionCreated>("/sessions", { method: "POST", body: JSON.stringify(body) }),
+  }) =>
+    request<SessionCreated>("/sessions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   getSession: (code: string) => request<SessionPublic>(`/sessions/${code}`),
+  getProgress: (code: string, clientToken: string) =>
+    request<{
+      answered: string[];
+      usedPowerups: Powerup[];
+      results: Record<string, AnswerResult>;
+    }>(`/sessions/${code}/participants/me`, {
+      headers: { "x-client-token": clientToken },
+    }),
 
   join: (code: string, body: { nickname: string; avatarColor?: string }) =>
     request<ParticipantCreated>(`/sessions/${code}/participants`, {
@@ -140,13 +184,16 @@ export const api = {
     }),
 
   getQuestions: (code: string, clientToken: string) =>
-    request<{ answered: string[]; questions: QuestionPublic[] }>(
-      `/sessions/${code}/questions`,
-      { headers: { "x-client-token": clientToken } },
-    ),
+    request<{
+      answered: string[];
+      questions: QuestionPublic[];
+      usedPowerups: Powerup[];
+    }>(`/sessions/${code}/questions`, {
+      headers: { "x-client-token": clientToken },
+    }),
 
   getViewToken: (code: string, questionId: string, clientToken: string) =>
-    request<{ viewToken: string }>(
+    request<{ viewToken: string; startedAt: string }>(
       `/sessions/${code}/questions/${questionId}/view`,
       { headers: { "x-client-token": clientToken } },
     ),
@@ -161,6 +208,7 @@ export const api = {
       numberValue?: number;
       elapsedMs?: number;
       viewToken?: string;
+      powerup?: Powerup;
     },
   ) =>
     request<AnswerResult>(`/sessions/${code}/answers`, {
@@ -173,7 +221,11 @@ export const api = {
       headers: hostToken ? { authorization: `Bearer ${hostToken}` } : {},
     }),
 
-  control: (code: string, hostToken: string, action: "start" | "reveal" | "next" | "end") =>
+  control: (
+    code: string,
+    hostToken: string,
+    action: "start" | "reveal" | "next" | "end",
+  ) =>
     request<{ ok: true }>(`/sessions/${code}/control`, {
       method: "POST",
       headers: { authorization: `Bearer ${hostToken}` },
@@ -189,4 +241,3 @@ export const api = {
     return `${BASE}/sessions/${code}/stream?${q}`;
   },
 };
-

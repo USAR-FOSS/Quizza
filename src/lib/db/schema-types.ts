@@ -30,7 +30,7 @@ export type QuestionSettings = {
   scaleMinLabel?: string;
   scaleMaxLabel?: string;
   maxWords?: number;
-  speedBonus?: boolean;
+  speedBonus?: boolean | null;
 };
 
 export type QuestionRow = {
@@ -50,6 +50,10 @@ export type LeaderboardPolicy = "per_question" | "at_end" | "never";
 export type ParticipationMode = "anonymous" | "one_per_device" | "signed_in";
 
 export type QuizSettings = {
+  coverImage?: string | null;
+  iconImage?: string | null;
+  speedBonus?: boolean;
+  powerups?: boolean;
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
   allowLateJoin?: boolean;

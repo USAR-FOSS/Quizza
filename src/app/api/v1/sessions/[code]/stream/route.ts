@@ -17,7 +17,10 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   let role: "host" | "player";
   if (hostToken && hostToken === session.hostToken) {
     role = "host";
-  } else if (playerToken && (await getParticipantByToken(session.id, playerToken))) {
+  } else if (
+    playerToken &&
+    (await getParticipantByToken(session.id, playerToken))
+  ) {
     role = "player";
   } else {
     return new Response("Unauthorized", { status: 401 });
@@ -26,49 +29,77 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const encoder = new TextEncoder();
   let unsubscribe = () => {};
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let closed = false;
+  let detachAbort = () => {};
+  const cleanup = () => {
+    closed = true;
+    if (heartbeat) clearInterval(heartbeat);
+    unsubscribe();
+    detachAbort();
+  };
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: unknown) => {
+        if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(obj)}\n\n`),
+          );
         } catch {
-          // stream closed
+          cleanup();
         }
       };
 
-      const snap = await buildSnapshots(session.id);
-      send(role === "host" ? snap.host : snap.player);
-
+      let initializing = true;
+      let newerState: unknown;
+      let latestTick: number | undefined;
       unsubscribe = subscribe(session.id, (event) => {
         if (event.kind === "state") {
-          send(role === "host" ? event.host : event.player);
+          const state = role === "host" ? event.host : event.player;
+          latestTick = undefined;
+          if (initializing) newerState = state;
+          else send(state);
         } else if (event.kind === "tick" && role === "host") {
-          send({ tick: event.answeredCount });
+          if (initializing) latestTick = event.answeredCount;
+          else send({ tick: event.answeredCount });
         }
       });
+
+      const abort = () => {
+        cleanup();
+        try {
+          controller.close();
+        } catch {}
+      };
+      req.signal.addEventListener("abort", abort, { once: true });
+      detachAbort = () => req.signal.removeEventListener("abort", abort);
+      if (req.signal.aborted) {
+        abort();
+        return;
+      }
+      try {
+        const snap = await buildSnapshots(session.id);
+        if (closed) return;
+        send(newerState ?? (role === "host" ? snap.host : snap.player));
+        if (latestTick !== undefined) send({ tick: latestTick });
+        initializing = false;
+      } catch (err) {
+        cleanup();
+        controller.error(err);
+        return;
+      }
 
       heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`: ping\n\n`));
         } catch {
-          // stream closed
+          cleanup();
         }
       }, 25000);
-
-      req.signal.addEventListener("abort", () => {
-        if (heartbeat) clearInterval(heartbeat);
-        unsubscribe();
-        try {
-          controller.close();
-        } catch {
-          // already closed
-        }
-      });
     },
     cancel() {
-      if (heartbeat) clearInterval(heartbeat);
-      unsubscribe();
+      cleanup();
     },
   });
 

@@ -11,6 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+import type { QuizSettings, QuestionSettings } from "./schema-types";
+export type { QuizSettings, QuestionSettings } from "./schema-types";
 
 /* ------------------------------------------------------------------ *
  *  enums
@@ -55,7 +57,9 @@ export const users = pgTable(
     // scrypt hash for email/password accounts; null for OIDC accounts.
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("host"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (t) => [
     uniqueIndex("users_subject_key").on(t.subject),
@@ -72,7 +76,9 @@ export const quizzes = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     // nullable: anonymous creators are allowed (auth is additive later).
-    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     title: text("title").notNull(),
     description: text("description"),
     // lucide icon key shown on the quiz cover (no emoji by product rule).
@@ -81,18 +87,15 @@ export const quizzes = pgTable(
     theme: text("theme").default("grape").notNull(),
     // free-form settings bag (shuffle, show leaderboard, music, etc.)
     settings: jsonb("settings").$type<QuizSettings>().default({}).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (t) => [index("quizzes_owner_idx").on(t.ownerId)],
 );
-
-export type QuizSettings = {
-  shuffleQuestions?: boolean;
-  shuffleOptions?: boolean;
-  showLeaderboard?: boolean;
-  allowLateJoin?: boolean;
-};
 
 /* ------------------------------------------------------------------ *
  *  questions - ordered slides within a quiz
@@ -110,21 +113,14 @@ export const questions = pgTable(
     prompt: text("prompt").notNull(),
     mediaUrl: text("media_url"),
     timeLimitSec: integer("time_limit_sec").default(20).notNull(),
-    points: integer("points").default(1000).notNull(),
+    points: integer("points").default(100).notNull(),
     settings: jsonb("settings").$type<QuestionSettings>().default({}).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (t) => [index("questions_quiz_idx").on(t.quizId, t.position)],
 );
-
-export type QuestionSettings = {
-  scaleMin?: number;
-  scaleMax?: number;
-  scaleMinLabel?: string;
-  scaleMaxLabel?: string;
-  maxWords?: number; // word cloud
-  speedBonus?: boolean; // award faster answers more points
-};
 
 /* ------------------------------------------------------------------ *
  *  options - answer choices for choice-type questions
@@ -165,15 +161,20 @@ export const sessions = pgTable(
     revealed: boolean("revealed").notNull().default(false),
     // secret the host holds to control the session.
     hostToken: text("host_token").notNull(),
-    currentQuestionId: uuid("current_question_id").references(() => questions.id, {
-      onDelete: "set null",
-    }),
+    currentQuestionId: uuid("current_question_id").references(
+      () => questions.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     // live mode: when the current question went live (for speed scoring).
     questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
     // scheduled mode: the window during which the quiz is open.
     opensAt: timestamp("opens_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
   },
   (t) => [
@@ -199,18 +200,26 @@ export const participants = pgTable(
     nickname: text("nickname").notNull(),
     // palette key for the colored monogram avatar (derived from nickname).
     avatarColor: text("avatar_color").default("grape").notNull(),
+    avatarUrl: text("avatar_url"),
     score: integer("score").default(0).notNull(),
     // client-held token so a participant can reconnect without re-joining.
     clientToken: text("client_token").notNull(),
     // signed-in participation: ties one attempt to one account.
-    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     // one-per-device participation: ties one attempt to a device cookie.
     deviceId: text("device_id"),
-    joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (t) => [
     index("participants_session_idx").on(t.sessionId),
-    uniqueIndex("participants_session_client_key").on(t.sessionId, t.clientToken),
+    uniqueIndex("participants_session_client_key").on(
+      t.sessionId,
+      t.clientToken,
+    ),
     // one attempt per account / per device, when those modes are enabled.
     uniqueIndex("participants_session_user_key")
       .on(t.sessionId, t.userId)
@@ -238,21 +247,60 @@ export const answers = pgTable(
     participantId: uuid("participant_id")
       .references(() => participants.id, { onDelete: "cascade" })
       .notNull(),
-    optionId: uuid("option_id").references(() => options.id, { onDelete: "set null" }),
+    optionId: uuid("option_id").references(() => options.id, {
+      onDelete: "set null",
+    }),
     textValue: text("text_value"), // word_cloud / open_text
     numberValue: integer("number_value"), // scale
     isCorrect: boolean("is_correct").default(false).notNull(),
     responseMs: integer("response_ms"), // time taken, for speed bonus
     points: integer("points").default(0).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    powerup: text("powerup").$type<"double" | "shield">(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (t) => [
     index("answers_question_idx").on(t.questionId),
     index("answers_session_idx").on(t.sessionId),
     // a participant answers each question at most once.
     uniqueIndex("answers_unique_response").on(t.questionId, t.participantId),
+    uniqueIndex("answers_powerup_once").on(t.participantId, t.powerup),
   ],
 );
+
+/** A durable first-view timestamp prevents timer resets across refreshes. */
+export const questionViews = pgTable(
+  "question_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    participantId: uuid("participant_id")
+      .references(() => participants.id, { onDelete: "cascade" })
+      .notNull(),
+    questionId: uuid("question_id")
+      .references(() => questions.id, { onDelete: "cascade" })
+      .notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("question_views_once").on(t.participantId, t.questionId)],
+);
+
+/** Small uploaded images live alongside the quiz data, including in backups. */
+export const uploads = pgTable("uploads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
+  quizId: uuid("quiz_id").references(() => quizzes.id, { onDelete: "cascade" }),
+  participantId: uuid("participant_id").references(() => participants.id, {
+    onDelete: "cascade",
+  }),
+  contentType: text("content_type").notNull(),
+  data: text("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 /* ------------------------------------------------------------------ *
  *  relations (for drizzle's relational query API)
@@ -270,7 +318,10 @@ export const questionsRelations = relations(questions, ({ one, many }) => ({
 }));
 
 export const optionsRelations = relations(options, ({ one }) => ({
-  question: one(questions, { fields: [options.questionId], references: [questions.id] }),
+  question: one(questions, {
+    fields: [options.questionId],
+    references: [questions.id],
+  }),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
@@ -279,17 +330,32 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   answers: many(answers),
 }));
 
-export const participantsRelations = relations(participants, ({ one, many }) => ({
-  session: one(sessions, { fields: [participants.sessionId], references: [sessions.id] }),
-  answers: many(answers),
-}));
+export const participantsRelations = relations(
+  participants,
+  ({ one, many }) => ({
+    session: one(sessions, {
+      fields: [participants.sessionId],
+      references: [sessions.id],
+    }),
+    answers: many(answers),
+  }),
+);
 
 export const answersRelations = relations(answers, ({ one }) => ({
-  session: one(sessions, { fields: [answers.sessionId], references: [sessions.id] }),
-  question: one(questions, { fields: [answers.questionId], references: [questions.id] }),
+  session: one(sessions, {
+    fields: [answers.sessionId],
+    references: [sessions.id],
+  }),
+  question: one(questions, {
+    fields: [answers.questionId],
+    references: [questions.id],
+  }),
   participant: one(participants, {
     fields: [answers.participantId],
     references: [participants.id],
   }),
-  option: one(options, { fields: [answers.optionId], references: [options.id] }),
+  option: one(options, {
+    fields: [answers.optionId],
+    references: [options.id],
+  }),
 }));

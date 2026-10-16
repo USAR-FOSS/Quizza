@@ -10,7 +10,7 @@ import type { LiveEvent } from "./events";
 const g = globalThis as unknown as { _quizzaBus?: EventEmitter };
 const bus = g._quizzaBus ?? new EventEmitter();
 bus.setMaxListeners(0); // many SSE subscribers per room
-if (process.env.NODE_ENV !== "production") g._quizzaBus = bus;
+g._quizzaBus = bus;
 
 export function publish(sessionId: string, event: LiveEvent): void {
   bus.emit(sessionId, event);

@@ -3,20 +3,24 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { COVER_ICONS, THEMES } from "@/lib/quiz-constants";
-import { coverIcon } from "@/components/ui/quiz-icons";
+import { COVER_ICON_MAP } from "@/components/ui/quiz-icons";
 import { cn } from "@/lib/utils";
 
 type Props = {
   title: string;
   coverIcon: string;
   theme: string;
-  onChange: (patch: { title?: string; coverIcon?: string; theme?: string }) => void;
+  onChange: (patch: {
+    title?: string;
+    coverIcon?: string;
+    theme?: string;
+  }) => void;
 };
 
 export function QuizMeta({ title, coverIcon: cover, theme, onChange }: Props) {
   const [open, setOpen] = useState<"icon" | "theme" | null>(null);
   const activeTheme = THEMES.find((t) => t.key === theme) ?? THEMES[0];
-  const CoverIcon = coverIcon(cover);
+  const CoverIcon = COVER_ICON_MAP[cover] ?? COVER_ICON_MAP.shapes;
 
   return (
     <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
@@ -34,7 +38,7 @@ export function QuizMeta({ title, coverIcon: cover, theme, onChange }: Props) {
           <Popover onClose={() => setOpen(null)}>
             <div className="grid grid-cols-6 gap-1">
               {COVER_ICONS.map((key) => {
-                const Icon = coverIcon(key);
+                const Icon = COVER_ICON_MAP[key] ?? COVER_ICON_MAP.shapes;
                 return (
                   <button
                     key={key}
@@ -60,6 +64,7 @@ export function QuizMeta({ title, coverIcon: cover, theme, onChange }: Props) {
 
       {/* title */}
       <input
+        aria-label="Quiz title"
         value={title}
         onChange={(e) => onChange({ title: e.target.value })}
         maxLength={120}
@@ -75,7 +80,12 @@ export function QuizMeta({ title, coverIcon: cover, theme, onChange }: Props) {
           className="flex h-10 items-center gap-1.5 rounded-xl border-2 border-ink bg-paper-2 px-2.5 transition-transform hover:-translate-y-0.5"
           aria-label="Change theme"
         >
-          <span className={cn("size-4 rounded-full border-2 border-ink", activeTheme.swatch)} />
+          <span
+            className={cn(
+              "size-4 rounded-full border-2 border-ink",
+              activeTheme.swatch,
+            )}
+          />
           <ChevronDown className="size-4 text-ink-soft" />
         </button>
         {open === "theme" && (
@@ -94,7 +104,12 @@ export function QuizMeta({ title, coverIcon: cover, theme, onChange }: Props) {
                     theme === t.key ? "text-ink" : "text-ink-soft",
                   )}
                 >
-                  <span className={cn("size-4 rounded-full border-2 border-ink", t.swatch)} />
+                  <span
+                    className={cn(
+                      "size-4 rounded-full border-2 border-ink",
+                      t.swatch,
+                    )}
+                  />
                   {t.label}
                 </button>
               ))}

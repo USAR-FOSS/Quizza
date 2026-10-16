@@ -1,9 +1,12 @@
-import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { authSecret } from "./auth-secret";
 
 /**
  * Host authentication. Participants are anonymous and never touch this.
@@ -12,25 +15,29 @@ import { users } from "@/lib/db/schema";
  */
 
 const COOKIE = "quizza_session";
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "dev-insecure-secret-change-me",
-);
+const deriveKey = promisify(scrypt);
+const secretKey = () => new TextEncoder().encode(authSecret());
 
 export type SessionUser = typeof users.$inferSelect;
 
 /* ------------------------------ passwords --------------------------- */
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
+  const hash = ((await deriveKey(password, salt, 64)) as Buffer).toString(
+    "hex",
+  );
   return `scrypt:${salt}:${hash}`;
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(
+  password: string,
+  stored: string,
+): Promise<boolean> {
   const [scheme, salt, hash] = stored.split(":");
   if (scheme !== "scrypt" || !salt || !hash) return false;
   const expected = Buffer.from(hash, "hex");
-  const actual = scryptSync(password, salt, 64);
+  const actual = (await deriveKey(password, salt, 64)) as Buffer;
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
@@ -41,7 +48,7 @@ export async function createSessionCookie(userId: string): Promise<void> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(SECRET);
+    .sign(secretKey());
   const jar = await cookies();
   jar.set(COOKIE, token, {
     httpOnly: true,
@@ -57,12 +64,12 @@ export async function clearSessionCookie(): Promise<void> {
   jar.delete(COOKIE);
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, secretKey());
     const id = typeof payload.sub === "string" ? payload.sub : null;
     if (!id) return null;
     const [u] = await db.select().from(users).where(eq(users.id, id)).limit(1);
@@ -70,7 +77,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 /** Whether OIDC sign-in is configured on this instance. */
 export function oidcEnabled(): boolean {

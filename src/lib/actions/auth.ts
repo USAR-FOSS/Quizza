@@ -32,18 +32,26 @@ export async function registerAction(input: unknown): Promise<Result> {
     return { error: "Too many attempts. Please wait a minute." };
   }
   const parsed = registerSchema.safeParse(input);
-  if (!parsed.success) return { error: "Enter a valid email and a password of at least 8 characters" };
+  if (!parsed.success)
+    return {
+      error: "Enter a valid email and a password of at least 8 characters",
+    };
   const email = parsed.data.email.toLowerCase();
 
-  const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (existing.length) return { error: "An account with that email already exists" };
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (existing.length)
+    return { error: "An account with that email already exists" };
 
   const [u] = await db
     .insert(users)
     .values({
       email,
       name: parsed.data.name || email.split("@")[0],
-      passwordHash: hashPassword(parsed.data.password),
+      passwordHash: await hashPassword(parsed.data.password),
     })
     .returning();
   await createSessionCookie(u.id);
@@ -63,8 +71,16 @@ export async function loginAction(input: unknown): Promise<Result> {
   if (!parsed.success) return { error: "Enter your email and password" };
   const email = parsed.data.email.toLowerCase();
 
-  const [u] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!u || !u.passwordHash || !verifyPassword(parsed.data.password, u.passwordHash)) {
+  const [u] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (
+    !u ||
+    !u.passwordHash ||
+    !(await verifyPassword(parsed.data.password, u.passwordHash))
+  ) {
     return { error: "Invalid email or password" };
   }
   await createSessionCookie(u.id);

@@ -4,8 +4,10 @@ An open-source, no-login-needed live quiz and polling platform. A FOSS
 alternative to Mentimeter. Build a quiz, share a room code, and let everyone play
 from their phones. Built to self-host.
 
-Status: early. The design system, data model, and quiz builder are in place. The
-runtime (live and scheduled play) and host sign-in are next. See the roadmap.
+Status: live and scheduled play, host accounts, quiz authoring, results, and
+exports are implemented. The interface includes a playable demo, Quip the quiz
+mascot, responsive layouts, accessible loading/error states, and reduced-motion
+support. See [the current gaps](docs/gaps.md) for remaining work.
 
 ## What it does
 
@@ -17,7 +19,8 @@ runtime (live and scheduled play) and host sign-in are next. See the roadmap.
 - Players join with a nickname. No account required.
 - Answers record accuracy and response time. Scoring rewards speed and accuracy,
   with a leaderboard.
-- Host sign-in via FOSSClub OIDC is planned, to own and revisit quizzes.
+- Hosts sign in through email/password or configured FOSSClub OIDC, own their
+  quizzes, and revisit sessions from their dashboard.
   Anonymous play stays first-class.
 
 ## Documentation
@@ -104,8 +107,22 @@ realtime under `src/lib`.
 - [x] Scheduled mode, end to end: host launch (`/present/[quizId]`), anonymous player (`/play/[code]`) with timing and accuracy, and results (`/results/[code]`)
 - [x] Live mode: presenter (`/host/[code]`) and player over SSE, room code, live reveal and leaderboard
 - [x] Host sign-in (email/password + FOSSClub OIDC flow), quiz ownership, my-quizzes dashboard (`/dashboard`)
-- [ ] Powerups, in-question multimedia, cheat-prevention hardening
-- [ ] Results export
+- [x] Optional double-points and shield powerups, direct HTTPS image/video/audio questions
+- [x] Shared server-timed live reveals, explicit player lock-in, private pre-reveal results
+- [x] Image/cover/icon/player-photo uploads, avatar-bubble lobbies, six room palettes
+- [x] 100-point defaults, quiz-wide speed scoring, viewport-safe question picker
+- [x] Authoring ownership checks, durable server timers, deadline enforcement, atomic scoring
+- [x] Results export: host CSV with spreadsheet-formula protection, JSON result summaries
+- [x] Searchable quiz library, quiz duplication, recent sessions, early session ending, host recovery
+- [x] Live word clouds, open-text reveals, configured scale ranges and averages
+- [x] Interactive demo and owner-only draft preview, illustrated loading/error states, responsive interface and reduced motion
+- [ ] Question/option duplication and reordering polish
+- [ ] Host QR codes, question pause/extend, participant moderation and capacity controls
+- [ ] Shared realtime/rate-limit backend and load testing at the PRD's full concurrency target
+
+After updating an existing installation, run `pnpm db:migrate` before starting
+the app. Migration 0003 adds durable question views and per-run powerup tracking.
+See [upgrade notes](docs/upgrade.md) for API and behavior changes.
 
 ## License
 

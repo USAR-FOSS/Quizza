@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
+import { MotionProvider } from "@/components/ui/motion-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,7 +24,13 @@ export const metadata: Metadata = {
   description:
     "An open-source, no-login-needed live quiz platform. Make it, share a code, let the room play. A FOSS Mentimeter alternative.",
   applicationName: "quizza",
-  keywords: ["quiz", "live polls", "mentimeter alternative", "foss", "open source"],
+  keywords: [
+    "quiz",
+    "live polls",
+    "mentimeter alternative",
+    "foss",
+    "open source",
+  ],
 };
 
 export const viewport: Viewport = {
@@ -34,9 +41,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <MotionProvider>{children}</MotionProvider>
+      </body>
     </html>
   );
 }
