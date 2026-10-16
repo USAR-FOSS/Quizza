@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw, Check } from "lucide-react";
+import { Loader2, RefreshCw, Check, Download } from "lucide-react";
 import { api, ApiClientError, type Results } from "@/lib/api-client";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/site/logo";
@@ -13,10 +13,17 @@ export function ResultsView({ code }: { code: string }) {
   const [results, setResults] = useState<Results | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
   const [refreshing, setRefreshing] = useState(false);
+  const [hostToken, setHostToken] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setResults(await api.getResults(code));
+      // the host holds the host token (stored at launch) and sees full results
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem(`quizza:host:${code}`)
+          : null;
+      setHostToken(token);
+      setResults(await api.getResults(code, token ?? undefined));
       setStatus("ok");
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 404) setStatus("notfound");
@@ -45,6 +52,15 @@ export function ResultsView({ code }: { code: string }) {
           <span className="font-mono text-sm font-bold text-ink-soft">
             {formatJoinCode(code)}
           </span>
+          {hostToken && (
+            <a
+              href={`/api/v1/sessions/${code}/export?host=${encodeURIComponent(hostToken)}`}
+              className="flex items-center gap-1.5 rounded-xl border-2 border-ink bg-paper px-3 py-1.5 font-display text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5"
+            >
+              <Download className="size-4" />
+              CSV
+            </a>
+          )}
           <button
             onClick={() => {
               setRefreshing(true);

@@ -9,6 +9,9 @@ import {
   sessions,
 } from "@/lib/db/schema";
 import { publish } from "./bus";
+import { canRevealAnswers, canShowLeaderboard } from "@/lib/quiz-policy";
+import { seededShuffle } from "@/lib/shuffle";
+import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
   HostSnapshot,
   LiveLeaderboardEntry,
@@ -59,6 +62,8 @@ export async function buildSnapshots(
     rank: i + 1,
   }));
 
+  const settings = (quiz?.settings as QuizSettings) ?? {};
+
   let phase: LivePhase;
   if (s.status === "ended") phase = "ended";
   else if (s.status === "lobby" || !s.currentQuestionId) phase = "lobby";
@@ -76,6 +81,10 @@ export async function buildSnapshots(
   let answeredCount = 0;
 
   if (current && (phase === "question" || phase === "reveal")) {
+    // option order shuffled once per session+question (same for all players)
+    const displayOptions = settings.shuffleOptions
+      ? seededShuffle(current.options, `o:${sessionId}:${current.id}`)
+      : current.options;
     question = {
       id: current.id,
       type: current.type,
@@ -84,7 +93,7 @@ export async function buildSnapshots(
       startedAt: s.questionStartedAt ? s.questionStartedAt.toISOString() : null,
       index: currentIndex,
       total: qs.length,
-      options: current.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
+      options: displayOptions.map((o) => ({ id: o.id, label: o.label, color: o.color })),
     };
     correctOptionId = current.options.find((o) => o.isCorrect)?.id ?? null;
 
@@ -99,11 +108,16 @@ export async function buildSnapshots(
     tallies = current.options.map((o) => ({ optionId: o.id, count: counts.get(o.id) ?? 0 }));
   }
 
-  // the player sees the tally and standings once a question is revealed or the
-  // session has ended; the host always sees everything.
+  // policy gating for the player view (the host always sees everything)
+  const over = phase === "ended";
+  const playerSeesAnswers = canRevealAnswers(settings, over);
+  const playerSeesBoard = canShowLeaderboard(settings, over);
+
   let playerLeaderboard: LiveLeaderboardEntry[] = [];
   if (phase === "lobby") playerLeaderboard = leaderboard; // the lobby roster
-  else if (phase === "reveal" || phase === "ended") playerLeaderboard = leaderboard;
+  else if (phase === "reveal" || phase === "ended") {
+    playerLeaderboard = playerSeesBoard ? leaderboard : [];
+  }
 
   const player: PlayerSnapshot = {
     phase,
@@ -112,7 +126,7 @@ export async function buildSnapshots(
     question,
     reveal:
       phase === "reveal"
-        ? { correctOptionId, tallies, totalAnswers }
+        ? { correctOptionId: playerSeesAnswers ? correctOptionId : null, tallies, totalAnswers }
         : null,
     leaderboard: playerLeaderboard,
   };

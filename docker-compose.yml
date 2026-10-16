@@ -1,0 +1,55 @@
+# Runs the whole stack: Postgres, a one-shot migration, then the app.
+# Usage: docker compose up --build
+# The app will be on http://localhost:3000
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: quizza
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quizza"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Uncomment to reach the DB from the host (note: may clash with a local
+    # Postgres already on 5432).
+    # ports:
+    #   - "5432:5432"
+
+  # One-shot: applies migrations, then exits. The app waits for it to succeed.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/quizza
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/quizza
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    # "no" so the container does not auto-resurrect on reboot and clobber a local
+    # `pnpm dev` on port 3000. For a real single-host deployment, set this to
+    # "unless-stopped" (or run under an orchestrator with its own restart policy).
+    restart: "no"
+
+volumes:
+  pgdata:

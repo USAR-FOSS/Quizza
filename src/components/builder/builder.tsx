@@ -3,16 +3,18 @@
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Play, Check, Loader2, ListPlus } from "lucide-react";
+import { Play, Check, Loader2, ListPlus, Settings2 } from "lucide-react";
 import { Logo } from "@/components/site/logo";
 import { QuestionSidebar } from "@/components/builder/question-sidebar";
 import { QuestionEditor } from "@/components/builder/question-editor";
 import { QuizMeta } from "@/components/builder/quiz-meta";
+import { QuizSettingsPanel } from "@/components/builder/quiz-settings";
 import * as actions from "@/lib/actions/quiz";
 import type {
   OptionRow,
   QuestionType,
   QuestionWithOptions,
+  QuizSettings,
   QuizWithQuestions,
 } from "@/lib/db/schema-types";
 
@@ -24,6 +26,7 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
     initial.questions[0]?.id ?? null,
   );
   const [save, setSave] = useState<SaveState>("idle");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // per-key debounce timers for text fields
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -62,6 +65,12 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
         theme: patch.theme,
       }),
     );
+  }
+
+  function patchSettings(patch: Partial<QuizSettings>) {
+    const next = { ...quiz.settings, ...patch };
+    setQuiz((q) => ({ ...q, settings: next }));
+    void runSave(() => actions.updateQuiz(quiz.id, { settings: next }));
   }
 
   /* ---------------- questions ---------------- */
@@ -193,6 +202,13 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
 
         <div className="flex shrink-0 items-center gap-3">
           <SaveBadge state={save} />
+          <button
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Quiz settings"
+            className="inline-flex size-10 items-center justify-center rounded-xl border-2 border-ink bg-paper text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+          >
+            <Settings2 className="size-4" />
+          </button>
           <Link
             href={`/present/${quiz.id}`}
             className="inline-flex h-10 items-center gap-2 rounded-xl border-2 border-ink bg-grape px-4 font-display text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
@@ -202,6 +218,14 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
           </Link>
         </div>
       </header>
+
+      {settingsOpen && (
+        <QuizSettingsPanel
+          settings={quiz.settings}
+          onChange={patchSettings}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {/* body */}
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 p-4 lg:flex-row lg:p-6">

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, X, Clock, Loader2, Trophy } from "lucide-react";
-import { api, type AnswerResult, type SessionPublic } from "@/lib/api-client";
+import { Check, X, Clock, Loader2, Trophy, LogIn } from "lucide-react";
+import { api, ApiClientError, type AnswerResult, type SessionPublic } from "@/lib/api-client";
 import { useEventStream } from "@/lib/use-event-stream";
 import type { PlayerSnapshot } from "@/lib/realtime/events";
 import { OPTION_COLORS, COLOR_BG, type OptionColor } from "@/lib/quiz-constants";
@@ -23,6 +24,7 @@ export function LivePlayer({ code }: { code: string }) {
   const [session, setSession] = useState<SessionPublic | null>(null);
   const [me, setMe] = useState<Identity | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [signinRequired, setSigninRequired] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -43,15 +45,23 @@ export function LivePlayer({ code }: { code: string }) {
   }, [code]);
 
   async function join(nickname: string, avatarColor: string) {
-    const p = await api.join(code, { nickname, avatarColor });
-    const identity: Identity = {
-      clientToken: p.clientToken,
-      participantId: p.id,
-      nickname: p.nickname,
-      avatarColor: p.avatarColor,
-    };
-    localStorage.setItem(storeKey(code), JSON.stringify(identity));
-    setMe(identity);
+    try {
+      const p = await api.join(code, { nickname, avatarColor });
+      const identity: Identity = {
+        clientToken: p.clientToken,
+        participantId: p.id,
+        nickname: p.nickname,
+        avatarColor: p.avatarColor,
+      };
+      localStorage.setItem(storeKey(code), JSON.stringify(identity));
+      setMe(identity);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "signin_required") {
+        setSigninRequired(true);
+      } else {
+        throw err;
+      }
+    }
   }
 
   if (notFound) {
@@ -59,6 +69,30 @@ export function LivePlayer({ code }: { code: string }) {
   }
   if (!session) {
     return <Screen><Loader2 className="size-8 animate-spin text-grape" /></Screen>;
+  }
+  if (signinRequired) {
+    return (
+      <Screen>
+        <div className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-8 text-center shadow-pop-lg">
+          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl border-2 border-ink bg-paper-2">
+            <LogIn className="size-8 text-ink" />
+          </div>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
+            Sign in to play
+          </h1>
+          <p className="mt-2 text-ink-soft">
+            This quiz allows one attempt per person, so it needs you signed in.
+          </p>
+          <Link
+            href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}
+            className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-grape px-6 font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5"
+          >
+            <LogIn className="size-5" />
+            Sign in
+          </Link>
+        </div>
+      </Screen>
+    );
   }
   if (!me) {
     return <Screen><JoinForm onJoin={join} /></Screen>;
