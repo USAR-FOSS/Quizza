@@ -4,7 +4,7 @@ import { getProgress } from "@/lib/sessions";
 
 type Ctx = { params: Promise<{ code: string }> };
 export const GET = handle<Ctx>(async (req: NextRequest, { params }) => {
-  enforceRateLimit(req, "progress", 120, 60_000);
+  await enforceRateLimit(req, "progress", 120, 60_000);
   const { code } = await params;
   return json(await getProgress(code, req.headers.get("x-client-token")));
 });

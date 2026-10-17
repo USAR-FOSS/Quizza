@@ -11,19 +11,19 @@ const questions = [
     prompt: "Which of these is actually a berry?",
     options: ["Strawberry", "Banana", "Raspberry", "Blackberry"],
     correct: 1,
-    fact: "Botanically speaking, bananas are berries. Strawberries? Not quite. Nature has a sense of humor.",
+    fact: "Botanically, bananas are berries; strawberries are not.",
   },
   {
     prompt: "An octopus has how many hearts?",
     options: ["One", "Two", "Three", "Eight"],
     correct: 2,
-    fact: "Three! Two pump blood to the gills, and one takes care of the rest of the body.",
+    fact: "Two pump blood to the gills; one serves the body.",
   },
   {
     prompt: "What does the first F in FOSS stand for?",
     options: ["Fast", "Friendly", "Fancy", "Free"],
     correct: 3,
-    fact: "Free and Open Source Software. That’s us—built to share, study, and make your own.",
+    fact: "FOSS means Free and Open Source Software.",
   },
 ];
 const colors = ["bg-[#e9e2ff]", "bg-[#e9f4ce]", "bg-[#ffe7d9]", "bg-[#deedf9]"];
@@ -41,7 +41,7 @@ export function DemoQuiz() {
   return (
     <div className="page-enter mx-auto w-full max-w-2xl">
       <div className="mb-7 flex items-center justify-between">
-        <span className="eyebrow text-grape">The little test drive</span>
+        <span className="eyebrow text-grape">Demo</span>
         <span className="rounded-full border border-ink/15 bg-lime/50 px-3 py-1 font-mono text-sm font-bold">
           {score.toLocaleString()} pts
         </span>
@@ -52,7 +52,7 @@ export function DemoQuiz() {
           className="page-enter rounded-3xl border-2 border-ink bg-paper p-6 shadow-pop-lg sm:p-9"
         >
           <div className="flex items-center justify-between text-xs font-bold text-ink-soft">
-            <span>JUST FOR FUN · NO ACCOUNT NEEDED</span>
+            <span>NO ACCOUNT NEEDED</span>
             <span>
               {index + 1} / {questions.length}
             </span>
@@ -100,9 +100,7 @@ export function DemoQuiz() {
           {picked !== null && (
             <div role="status" className="page-enter mt-6">
               <h2 className="font-display text-xl font-bold">
-                {picked === q.correct
-                  ? "Look at you, knowing things."
-                  : "A good guess. A new fun fact."}
+                {picked === q.correct ? "Correct" : "Incorrect"}
               </h2>
               <p className="mt-2 leading-relaxed text-ink-soft">{q.fact}</p>
               <Button
@@ -113,8 +111,8 @@ export function DemoQuiz() {
                 className="mt-5 w-full"
               >
                 {index === questions.length - 1
-                  ? "How did I do?"
-                  : "Next good question"}
+                  ? "See results"
+                  : "Next question"}
                 <ArrowRight className="size-4" />
               </Button>
             </div>
@@ -125,18 +123,14 @@ export function DemoQuiz() {
           <QuizBuddy className="mx-auto w-40" />
           <span className="eyebrow text-grape">
             <Trophy className="size-4" />
-            Curiosity looks good on you
+            Demo complete
           </span>
           <h1 className="mt-4 font-display text-4xl font-extrabold">
-            {score / 1000} out of 3. Nicely played.
+            {score / 1000} out of 3 correct
           </h1>
-          <p className="mt-4 text-ink-soft">
-            That was a tiny taste. Now make a quiz that’s all you—your
-            questions, your people, your moment.
-          </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Button href="/create">
-              Make my first quiz
+              Create a quiz
               <ArrowRight className="size-4" />
             </Button>
             <Button
@@ -154,7 +148,7 @@ export function DemoQuiz() {
         </section>
       )}
       <p className="mt-6 text-center text-xs text-ink-soft">
-        A practice round, just for you. Demo scores aren’t saved.
+        Demo scores aren’t saved.
       </p>
     </div>
   );

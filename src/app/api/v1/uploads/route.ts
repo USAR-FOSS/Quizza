@@ -45,7 +45,7 @@ export const POST = handle(async (req: NextRequest) => {
     sessionId = session.id;
   } else
     throw new HttpError(401, "unauthorized", "Sign in or join a room first.");
-  if (!rateLimit(`upload:${ownerId ?? participantId}`, 20, 60_000).ok)
+  if (!(await rateLimit(`upload:${ownerId ?? participantId}`, 20, 60_000)).ok)
     throw new HttpError(
       429,
       "rate_limited",
@@ -109,7 +109,7 @@ export const POST = handle(async (req: NextRequest) => {
           eq(participants.sessionId, sessionId),
         ),
       );
-    scheduleRoster(sessionId);
+    scheduleRoster(sessionId, participantId, false);
   }
   return json({ url }, 201);
 });

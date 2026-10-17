@@ -64,13 +64,17 @@ export function clientIp(req: NextRequest): string {
 }
 
 /** Throw 429 if the caller has exceeded `limit` requests per `windowMs`. */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   req: NextRequest,
   name: string,
   limit: number,
   windowMs: number,
-): void {
-  const { ok, retryAfter } = rateLimit(`${name}:${clientIp(req)}`, limit, windowMs);
+): Promise<void> {
+  const { ok, retryAfter } = await rateLimit(
+    `${name}:${clientIp(req)}`,
+    limit,
+    windowMs,
+  );
   if (!ok) {
     throw new HttpError(429, "rate_limited", `Too many requests. Try again in ${retryAfter}s.`);
   }

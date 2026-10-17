@@ -48,12 +48,15 @@ export type QuestionRow = {
 export type RevealPolicy = "per_question" | "at_end" | "never";
 export type LeaderboardPolicy = "per_question" | "at_end" | "never";
 export type ParticipationMode = "anonymous" | "one_per_device" | "signed_in";
+export type Powerup = "double" | "shield" | "safety_net" | "attack";
 
 export type QuizSettings = {
   coverImage?: string | null;
   iconImage?: string | null;
   speedBonus?: boolean;
   powerups?: boolean;
+  powerupUses?: number; // shared charges across all enabled powerups, 1–3; default 1
+  powerupTypes?: Powerup[];
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
   allowLateJoin?: boolean;

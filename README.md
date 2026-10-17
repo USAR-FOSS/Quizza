@@ -46,7 +46,7 @@ The full set is indexed in [docs/README.md](docs/README.md). Key documents:
 | Animation  | motion (Framer Motion)      | respects reduced-motion |
 | ORM / DB   | Drizzle + Postgres          | pure TS, no native engine (works on NixOS) |
 | Validation | zod                         | shared by forms, actions, and the API |
-| Realtime   | SSE + server actions        | see decision 0009 |
+| Realtime   | SSE + Redis Pub/Sub + QStash | cross-instance fan-out and durable live reveals |
 
 ## Local development
 
@@ -62,6 +62,15 @@ pnpm db:generate                    # SQL from the schema into drizzle/
 pnpm db:migrate                     # apply migrations
 pnpm dev                            # http://localhost:3000
 ```
+
+For local full-stack development, `docker compose up --build` also starts
+Redis. Set `REALTIME_DRIVER=redis` and use a public development URL plus QStash
+to exercise durable live reveals; otherwise the default local `memory` driver
+keeps ordinary UI work self-contained. Production rejects the memory driver.
+
+Vercel deployments require a pooled `DATABASE_URL`, `REDIS_URL`,
+`REALTIME_DRIVER=redis`, `APP_URL`, and the QStash token/signing keys. Follow
+[docs/deployment.md](docs/deployment.md) before opening a live room.
 
 We use `db:generate` plus `db:migrate` rather than `db:push` because
 `drizzle-kit push` needs an interactive TTY. The migrator at
@@ -107,7 +116,7 @@ realtime under `src/lib`.
 - [x] Scheduled mode, end to end: host launch (`/present/[quizId]`), anonymous player (`/play/[code]`) with timing and accuracy, and results (`/results/[code]`)
 - [x] Live mode: presenter (`/host/[code]`) and player over SSE, room code, live reveal and leaderboard
 - [x] Host sign-in (email/password + FOSSClub OIDC flow), quiz ownership, my-quizzes dashboard (`/dashboard`)
-- [x] Optional double-points and shield powerups, direct HTTPS image/video/audio questions
+- [x] Configurable Double up, Safety net, Shield, and Attack powerups; direct HTTPS image/video/audio questions
 - [x] Shared server-timed live reveals, explicit player lock-in, private pre-reveal results
 - [x] Image/cover/icon/player-photo uploads, avatar-bubble lobbies, six room palettes
 - [x] 100-point defaults, quiz-wide speed scoring, viewport-safe question picker
@@ -118,10 +127,12 @@ realtime under `src/lib`.
 - [x] Interactive demo and owner-only draft preview, illustrated loading/error states, responsive interface and reduced motion
 - [ ] Question/option duplication and reordering polish
 - [ ] Host QR codes, question pause/extend, participant moderation and capacity controls
-- [ ] Shared realtime/rate-limit backend and load testing at the PRD's full concurrency target
+- [x] Shared Redis realtime/rate-limit backend and durable live reveal scheduler
+- [ ] Load testing and measured capacity at the PRD's full concurrency target
 
 After updating an existing installation, run `pnpm db:migrate` before starting
-the app. Migration 0003 adds durable question views and per-run powerup tracking.
+the app. Migrations 0003–0006 cover durable question views, image uploads,
+and the repeatable powerup/attack model.
 See [upgrade notes](docs/upgrade.md) for API and behavior changes.
 
 ## License

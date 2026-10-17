@@ -12,6 +12,9 @@ from [strat.md](../strat.md). This page is the map; each document is the detail.
 | [decisions.md](./decisions.md) | Architecture and design | Architecture Decision Records: sequential log of significant choices with context and status. | Living |
 | [threat-model.md](./threat-model.md) | Architecture and design | STRIDE security analysis mapped onto the architecture, with mitigations and status. | Living |
 | [data-dictionary.md](./data-dictionary.md) | Architecture and design | Schema design: every table, column, type, constraint, index, and relationship, plus JSONB sub-schemas. | Living |
+| [deployment.md](./deployment.md) | Operations | Provider setup, environment variables, rollout, and rollback. | Living |
+| [runbooks/realtime.md](./runbooks/realtime.md) | Operations | Realtime health checks, failure response, and load-test procedure. | Living |
+| [realtime-scale-plan.md](./realtime-scale-plan.md) | Architecture and operations | Ordered implementation and acceptance plan for multi-instance live play. | Living |
 | OpenAPI (`/api/v1/openapi.json`, UI at `/docs`) | Support and operations | API reference for the runtime and play surface, generated from the zod schemas. | Generated |
 
 ## How to read it

@@ -10,20 +10,30 @@ if (!connectionString) {
   );
 }
 
-// Reuse a single postgres.js client across hot-reloads in dev so we don't
-// exhaust connections. In prod each serverless instance gets its own.
+// Reuse one postgres.js client per warm runtime so hot reloads and concurrent
+// requests do not create a new pool. Each serverless instance still owns its
+// own bounded pool, so the deployment must use a pooled DATABASE_URL.
 const globalForDb = globalThis as unknown as { _pg?: ReturnType<typeof postgres> };
+
+const configuredPoolMax = Number(process.env.DB_POOL_MAX);
+const defaultPoolMax = process.env.VERCEL
+  ? 5
+  : process.env.NODE_ENV === "production"
+    ? 20
+    : 2;
+const poolMax =
+  Number.isInteger(configuredPoolMax) && configuredPoolMax > 0
+    ? configuredPoolMax
+    : defaultPoolMax;
 
 const client =
   globalForDb._pg ??
   postgres(connectionString, {
-    // headroom for the live submit burst at the operating target (ADR 0018);
-    // inserts are small and fast, so ~20 connections is plenty single-instance.
-    max: process.env.NODE_ENV === "production" ? 20 : 2,
+    max: poolMax,
     prepare: false, // friendlier to poolers (pgbouncer / supabase / neon)
   });
 
-if (process.env.NODE_ENV !== "production") globalForDb._pg = client;
+globalForDb._pg = client;
 
 export const db = drizzle(client, { schema });
 export { schema };

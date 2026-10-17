@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/scripts/load/*.players.json
 
 # next.js
 /.next/

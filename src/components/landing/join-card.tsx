@@ -59,7 +59,7 @@ export function JoinCard() {
     e.preventDefault();
     if (!complete) {
       setShake(true);
-      setError("You’ll need all six digits. Ask your host for the room code.");
+      setError("Enter the six-digit room code.");
       inputs.current[digits.findIndex((digit) => !digit)]?.focus();
       setTimeout(() => setShake(false), 500);
       return;
@@ -83,13 +83,13 @@ export function JoinCard() {
     >
       <p className="eyebrow text-grape">
         <Radio className="size-4" />
-        Your people are waiting
+        Join a room
       </p>
       <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight text-ink">
-        Got a room code?
+        Enter room code
       </h2>
       <p className="mt-2 text-sm text-ink-soft">
-        Six little digits. One good time.
+        Ask the host for the six-digit code.
       </p>
 
       <div className="mt-5 flex justify-between gap-1.5 sm:gap-2">

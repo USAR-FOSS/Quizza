@@ -255,7 +255,12 @@ export const answers = pgTable(
     isCorrect: boolean("is_correct").default(false).notNull(),
     responseMs: integer("response_ms"), // time taken, for speed bonus
     points: integer("points").default(0).notNull(),
-    powerup: text("powerup").$type<"double" | "shield">(),
+    powerup: text("powerup").$type<"double" | "shield" | "safety_net" | "attack">(),
+    powerupTargetId: uuid("powerup_target_id").references(() => participants.id, {
+      onDelete: "set null",
+    }),
+    attackStolen: integer("attack_stolen").default(0).notNull(),
+    attackBlocked: boolean("attack_blocked").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -265,7 +270,8 @@ export const answers = pgTable(
     index("answers_session_idx").on(t.sessionId),
     // a participant answers each question at most once.
     uniqueIndex("answers_unique_response").on(t.questionId, t.participantId),
-    uniqueIndex("answers_powerup_once").on(t.participantId, t.powerup),
+    index("answers_participant_powerup_idx").on(t.participantId, t.powerup),
+    index("answers_attack_target_idx").on(t.sessionId, t.powerupTargetId),
   ],
 );
 

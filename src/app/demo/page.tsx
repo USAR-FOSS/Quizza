@@ -2,7 +2,7 @@ import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { DemoQuiz } from "@/components/landing/demo-quiz";
 
-export const metadata = { title: "A little test drive · Quizza" };
+export const metadata = { title: "Demo · Quizza" };
 export default function DemoPage() {
   return (
     <>

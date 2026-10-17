@@ -89,6 +89,8 @@ const quizSettingsSchema = z.object({
   iconImage: z.string().max(2048).refine(isMediaUrl).nullable().optional(),
   speedBonus: z.boolean().optional(),
   powerups: z.boolean().optional(),
+  powerupUses: z.number().int().min(1).max(3).optional(),
+  powerupTypes: z.array(z.enum(["double", "shield", "safety_net", "attack"])).min(1).max(4).optional(),
   shuffleQuestions: z.boolean().optional(),
   shuffleOptions: z.boolean().optional(),
   allowLateJoin: z.boolean().optional(),

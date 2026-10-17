@@ -18,7 +18,7 @@ export default function PlayPage({
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center bg-paper">
-          <LoadingState label="Finding your people…" />
+          <LoadingState label="Loading room…" />
         </div>
       }
     >

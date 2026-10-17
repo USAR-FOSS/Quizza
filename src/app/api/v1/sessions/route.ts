@@ -5,7 +5,7 @@ import { createSession } from "@/lib/sessions";
 import { getCurrentUser } from "@/lib/auth";
 
 export const POST = handle(async (req: NextRequest) => {
-  enforceRateLimit(req, "create_session", 30, 60_000);
+  await enforceRateLimit(req, "create_session", 30, 60_000);
   const body = await parseBody(req, CreateSessionBody);
   const user = await getCurrentUser();
   const session = await createSession(body, user?.id ?? null);

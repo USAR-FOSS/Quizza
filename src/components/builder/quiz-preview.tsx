@@ -191,9 +191,9 @@ function PreviewQuestion({ question: q }: { question: QuestionWithOptions }) {
         >
           {meta.scorable && chosen
             ? q.options.find((option) => option.id === chosen)?.isCorrect
-              ? "Look at you, knowing things. Correct!"
-              : "Not quite. A new fun fact for next time."
-            : "Nice. Your voice is part of the picture."}
+              ? "Correct"
+              : "Incorrect"
+            : "Answer saved"}
         </p>
       )}
     </section>

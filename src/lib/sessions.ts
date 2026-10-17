@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   answers,
@@ -11,10 +11,13 @@ import {
 } from "@/lib/db/schema";
 import { HttpError } from "@/lib/api/http";
 import {
+  resetAnswerCounter,
   scheduleRoster,
   scheduleAnswerCount,
 } from "@/lib/realtime/notifications";
 import { publishState } from "@/lib/realtime/snapshot";
+import { scheduleReveal } from "@/lib/realtime/scheduler";
+import { settleDueQuestion } from "@/lib/realtime/settlement";
 import { generateJoinCode, generateToken } from "@/lib/codes";
 import { QUESTION_TYPES, OPTION_COLORS } from "@/lib/quiz-constants";
 import { clampResponseMs, computePoints } from "@/lib/scoring";
@@ -28,7 +31,7 @@ import { seededShuffle } from "@/lib/shuffle";
 import { signViewToken, verifyViewToken } from "@/lib/view-token";
 import { isClean } from "@/lib/moderation";
 import { csvField } from "@/lib/csv";
-import { applyPowerup } from "@/lib/powerups";
+import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
 import type { z } from "zod";
 import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
@@ -196,6 +199,16 @@ export async function getProgress(code: string, token: string | null) {
       ),
     );
   const settings = await sessionSettings(s);
+  const incoming = await db.select({
+    questionId: answers.questionId,
+    attackStolen: answers.attackStolen,
+  }).from(answers).where(and(
+    eq(answers.sessionId, s.id),
+    eq(answers.powerupTargetId, participant.id),
+  ));
+  const lossByQuestion = new Map<string, number>();
+  for (const attack of incoming)
+    lossByQuestion.set(attack.questionId, (lossByQuestion.get(attack.questionId) ?? 0) + attack.attackStolen);
   const visible = canRevealAnswers(settings, s.status === "ended");
   const results: Record<
     string,
@@ -205,6 +218,9 @@ export async function getProgress(code: string, token: string | null) {
       isCorrect: boolean | null;
       pointsAwarded: number | null;
       correctOptionId: string | null;
+      attackStolen: number;
+      attackBlocked: boolean;
+      attackedLoss: number;
     }
   > = {};
   for (const a of rows) {
@@ -220,6 +236,9 @@ export async function getProgress(code: string, token: string | null) {
       isCorrect: visible ? a.isCorrect : null,
       pointsAwarded: visible ? a.points : null,
       correctOptionId: null,
+      attackStolen: a.attackStolen,
+      attackBlocked: a.attackBlocked,
+      attackedLoss: lossByQuestion.get(a.questionId) ?? 0,
     };
   }
   return {
@@ -387,6 +406,8 @@ export async function getPublicSession(code: string) {
     participantCount: count,
     participation: participationMode((quiz?.settings as QuizSettings) ?? {}),
     powerups: Boolean(quiz?.settings.powerups),
+    powerupUses: powerupUses(quiz?.settings),
+    powerupTypes: enabledPowerups(quiz?.settings, s.mode),
     quiz: {
       title: quiz?.title ?? "",
       coverIcon: quiz?.coverIcon ?? "shapes",
@@ -467,7 +488,7 @@ export async function joinSession(
         deviceId,
       })
       .returning();
-    if (s.mode === "live") scheduleRoster(s.id);
+    if (s.mode === "live") scheduleRoster(s.id, p.id, true);
     return participantView(p);
   } catch (err) {
     // lost a race on the per-user/per-device unique index: return the winner
@@ -717,12 +738,18 @@ export async function submitAnswer(
 
   const meta = QUESTION_TYPES[q.type];
   const settings = await sessionSettings(s);
-  if (input.powerup && (!settings.powerups || !meta.scorable)) {
+  if (input.powerup && (!meta.scorable || !enabledPowerups(settings, s.mode).includes(input.powerup))) {
     throw new HttpError(
       422,
       "powerup_unavailable",
       "Powerups are not enabled for this question",
     );
+  }
+  if ((input.powerup === "attack") !== Boolean(input.powerupTargetId)) {
+    throw new HttpError(422, "attack_target_required", "Choose one player to attack");
+  }
+  if (input.powerupTargetId === participant.id) {
+    throw new HttpError(422, "invalid_attack_target", "Choose another player");
   }
   let optionId: string | null = null;
   let textValue: string | null = null;
@@ -862,6 +889,28 @@ export async function submitAnswer(
           );
         }
       }
+      if (input.powerup) {
+        // Serialize answers by this player across questions so charges cannot
+        // be overspent by concurrent requests on different app instances.
+        await tx.select({ id: participants.id }).from(participants)
+          .where(eq(participants.id, participant.id)).for("update");
+        const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` })
+          .from(answers).where(and(
+            eq(answers.participantId, participant.id),
+            isNotNull(answers.powerup),
+          ));
+        if (count >= powerupUses(settings))
+          throw new HttpError(409, "powerup_used", "No powerups left");
+        if (input.powerupTargetId) {
+          const [target] = await tx.select({ id: participants.id }).from(participants)
+            .where(and(
+              eq(participants.id, input.powerupTargetId),
+              eq(participants.sessionId, s.id),
+            ));
+          if (!target)
+            throw new HttpError(422, "invalid_attack_target", "That player is not in this room");
+        }
+      }
       await tx.insert(answers).values({
         sessionId: s.id,
         questionId: q.id,
@@ -873,6 +922,7 @@ export async function submitAnswer(
         responseMs,
         points,
         powerup: input.powerup,
+        powerupTargetId: input.powerupTargetId,
       });
       if (points > 0)
         await tx
@@ -882,20 +932,6 @@ export async function submitAnswer(
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      if (input.powerup) {
-        const used = await db.query.answers.findFirst({
-          where: and(
-            eq(answers.participantId, participant.id),
-            eq(answers.powerup, input.powerup),
-          ),
-        });
-        if (used && used.questionId !== q.id)
-          throw new HttpError(
-            409,
-            "powerup_used",
-            "That powerup has already been used",
-          );
-      }
       throw new HttpError(
         409,
         "already_answered",
@@ -935,11 +971,39 @@ export async function getResults(code: string, ctx: ResultsContext) {
   const isHost = Boolean(ctx.hostToken && ctx.hostToken === s.hostToken);
   const over = isSessionOver(s);
   const settings = await sessionSettings(s);
-  const showAnswers = isHost || canRevealAnswers(settings, over);
-  const showBoard =
-    isHost ||
-    ((over || (s.mode === "live" && s.revealed)) &&
-      canShowLeaderboard(settings, over));
+  const quiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, s.quizId),
+    with: {
+      questions: {
+        orderBy: asc(questions.position),
+        with: { options: { orderBy: asc(options.position) } },
+      },
+    },
+  });
+  let participantFinished = false;
+  if (s.mode === "scheduled" && !over && ctx.clientToken) {
+    const player = await getParticipant(s.id, ctx.clientToken);
+    if (player && quiz?.questions.length) {
+      const [playerAnswers, views] = await Promise.all([
+        db.select({ questionId: answers.questionId }).from(answers)
+          .where(eq(answers.participantId, player.id)),
+        db.select({ questionId: questionViews.questionId, startedAt: questionViews.startedAt })
+          .from(questionViews).where(eq(questionViews.participantId, player.id)),
+      ]);
+      const completed = new Set(playerAnswers.map((answer) => answer.questionId));
+      for (const view of views) {
+        const question = quiz.questions.find((item) => item.id === view.questionId);
+        if (question && Date.now() >= view.startedAt.getTime() + question.timeLimitSec * 1000)
+          completed.add(view.questionId);
+      }
+      participantFinished = quiz.questions.every((question) => completed.has(question.id));
+    }
+  }
+  const playerEnd = over || participantFinished;
+  const showAnswers = isHost || canRevealAnswers(settings, playerEnd);
+  const showBoard = isHost ||
+    ((playerEnd || (s.mode === "live" && s.revealed)) &&
+      canShowLeaderboard(settings, playerEnd));
 
   const parts = await db
     .select()
@@ -958,16 +1022,6 @@ export async function getResults(code: string, ctx: ResultsContext) {
       }))
     : [];
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: {
-        orderBy: asc(questions.position),
-        with: { options: { orderBy: asc(options.position) } },
-      },
-    },
-  });
-
   const allAnswers = await db
     .select()
     .from(answers)
@@ -980,7 +1034,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
     byQuestion.set(a.questionId, list);
   }
 
-  const questionStats = (!isHost && !over ? [] : (quiz?.questions ?? [])).map(
+  const questionStats = (!isHost && !playerEnd ? [] : (quiz?.questions ?? [])).map(
     (q) => {
       const list = byQuestion.get(q.id) ?? [];
       const meta = QUESTION_TYPES[q.type];
@@ -1012,6 +1066,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
       return {
         questionId: q.id,
         prompt: q.prompt,
+        mediaUrl: q.mediaUrl,
         type: q.type,
         responses: list.length,
         options: optionTallies,
@@ -1148,6 +1203,19 @@ export async function controlSession(
         "Everyone gets the full timer. Answers reveal together when it ends.",
       );
   }
+  if (action === "reveal") {
+    if (!s.currentQuestionId || !s.questionStartedAt)
+      throw new HttpError(409, "not_started", "Start the session first");
+    const result = await settleDueQuestion({
+      sessionId: s.id,
+      questionId: s.currentQuestionId,
+      questionStartedAt: s.questionStartedAt.toISOString(),
+    });
+    if (result.status === "early")
+      throw new HttpError(409, "round_running", "Everyone gets the full timer.");
+    if (result.status === "revealed") await publishState(s.id);
+    return { ok: true as const };
+  }
 
   let qrows = await db
     .select({ id: questions.id })
@@ -1162,26 +1230,53 @@ export async function controlSession(
     : -1;
 
   let patch: Partial<typeof sessions.$inferInsert>;
+  let scheduledQuestion: {
+    id: string;
+    startedAt: Date;
+    timeLimitSec: number;
+  } | null = null;
   if (action === "start") {
     if (total === 0)
       throw new HttpError(409, "no_questions", "Add questions first");
+    const startedAt = new Date();
+    const question = await db.query.questions.findFirst({
+      where: eq(questions.id, qrows[0].id),
+      columns: { timeLimitSec: true },
+    });
+    if (!question)
+      throw new HttpError(409, "no_questions", "Add questions first");
+    scheduledQuestion = {
+      id: qrows[0].id,
+      startedAt,
+      timeLimitSec: question.timeLimitSec,
+    };
     patch = {
       status: "active",
       currentQuestionId: qrows[0].id,
-      questionStartedAt: new Date(),
+      questionStartedAt: startedAt,
       revealed: false,
     };
-  } else if (action === "reveal") {
-    patch = { revealed: true };
   } else if (action === "next") {
     const nextIdx = curIdx + 1;
     if (nextIdx >= total) {
       patch = { status: "ended", revealed: true, endedAt: new Date() };
     } else {
+      const startedAt = new Date();
+      const question = await db.query.questions.findFirst({
+        where: eq(questions.id, qrows[nextIdx].id),
+        columns: { timeLimitSec: true },
+      });
+      if (!question)
+        throw new HttpError(409, "no_questions", "Add questions first");
+      scheduledQuestion = {
+        id: qrows[nextIdx].id,
+        startedAt,
+        timeLimitSec: question.timeLimitSec,
+      };
       patch = {
         status: "active",
         currentQuestionId: qrows[nextIdx].id,
-        questionStartedAt: new Date(),
+        questionStartedAt: startedAt,
         revealed: false,
       };
     }
@@ -1190,6 +1285,24 @@ export async function controlSession(
   } else {
     throw new HttpError(422, "bad_action", "Unknown action");
   }
+
+  if (scheduledQuestion) {
+    await scheduleReveal(
+      {
+        sessionId: s.id,
+        questionId: scheduledQuestion.id,
+        questionStartedAt: scheduledQuestion.startedAt.toISOString(),
+      },
+      scheduledQuestion.startedAt.getTime() +
+        scheduledQuestion.timeLimitSec * 1000,
+    );
+  }
+
+  // Seed the distributed host-only counter before the new round becomes
+  // answerable. A failed conditional update leaves only a short-lived key.
+  if (action === "start") await resetAnswerCounter(s.id, qrows[0].id);
+  else if (action === "next" && curIdx + 1 < total)
+    await resetAnswerCounter(s.id, qrows[curIdx + 1].id);
 
   const changed = await db
     .update(sessions)

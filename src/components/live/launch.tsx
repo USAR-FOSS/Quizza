@@ -87,7 +87,7 @@ export function Launch({
       </p>
 
       <h2 className="mt-6 font-display text-xl font-bold">
-        How are we playing?
+        Quiz mode
       </h2>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <ModeCard
@@ -95,7 +95,7 @@ export function Launch({
           onClick={() => setMode("scheduled")}
           icon={<Calendar className="size-5" />}
           label="Scheduled"
-          blurb="Their time, their pace. Set an open window."
+          blurb="Players complete it during an open window."
         />
         <ModeCard
           active={mode === "live"}

@@ -20,10 +20,15 @@ smoke checks; production scale has not been load-tested.
   requests. Missing/invalid view tokens and expired/revealed question submissions
   are rejected. Client elapsed time cannot substitute for the server clock.
 - Answer insertion and participant score changes share a transaction. Unique
-  constraints prevent duplicate answers and reused powerups. Scale bounds and
+  constraints prevent duplicate answers; locked per-player checks enforce the
+  host's one-to-three shared powerup charges. Scale bounds and
   configured word-cloud entry counts are validated on the server.
-- Optional double-points and shield powerups, once each per participant per run.
-  They are off by default and work in live and scheduled play.
+- Optional Double up, Safety net, Shield, and Attack powerups, with one to three
+  total charges per player. Shield and Attack are live-only; attack transfers
+  settle atomically at the shared reveal. Players see their game kit before play.
+- Scheduled players can see policy-permitted answers and standings after their
+  own attempt finishes, even while the room remains open. Uploaded question
+  media remains visible on live reveal and in the final answer review.
 - HTTPS question media (images, direct video and audio), with controls, loading
   failures, and no server-side URL fetching. Quiz images, covers, custom icons,
   and player photos can also be uploaded, resized, and stored in Postgres.
@@ -46,7 +51,8 @@ smoke checks; production scale has not been load-tested.
   of a secret in a download URL. JSON aggregate summaries are downloadable.
 - Public question aggregates are withheld while a session runs. Results honor
   answer and leaderboard policies. Failed results requests display an error.
-- Answer-count and join notifications coalesce bursts into batches. Live players
+- Answer counts use a Redis counter and host-only tick events; joins use small
+  roster events. Live players
   recover their answered IDs and used powerups after reloading, and see connection
   recovery messages rather than silently losing their place.
 - Quip mascot, redesigned landing/dashboard, no-account interactive demo,
@@ -60,7 +66,7 @@ smoke checks; production scale has not been load-tested.
 - Question duplication and option reordering.
 - QR join codes, pause/extend a live question, participant cap/kick controls.
 - Participant-specific answer review and richer host drill-down/analytics.
-- Additional powerups such as hints or attacks; music, uploaded audio/video,
+- Additional powerups such as hints; music, uploaded audio/video,
   image cropping, and standalone cleanup of replaced uploads.
 - Admin tooling, OIDC roles/member restrictions, audit logs, account recovery.
 - A session snapshot of the quiz template for long-term immutable historical
@@ -69,9 +75,10 @@ smoke checks; production scale has not been load-tested.
 
 ### Infrastructure and integrity limits
 
-- SSE pub/sub and rate limits are process-local. Multiple app instances need a
-  shared backend; sticky routing alone is not sufficient for state broadcasts.
-  Automatic live reveals also need a durable scheduler for serverless hosting.
+- Redis Pub/Sub now backs SSE fan-out and Redis-backed fixed-window rate limits
+  are shared across app instances. QStash now owns automatic live reveals, with
+  signed, idempotent callbacks. Pub/Sub remains at-most-once by design, so SSE
+  reconnects always rebuild state from Postgres.
   Current uploads are public by unguessable URL, not private media storage.
 - The PRD's 10 parallel rooms × 1,000 simultaneous players is a target, not a
   verified capacity claim. Run representative DB/SSE load tests and monitor the

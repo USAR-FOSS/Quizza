@@ -22,20 +22,20 @@ import { QuizBuddy } from "@/components/ui/quiz-buddy";
 
 const steps = [
   {
-    title: "A spark of curiosity.",
-    text: "Mix six question types, add your media, and make it your own.",
+    title: "Create a quiz",
+    text: "Add questions, images, and settings.",
     color: "bg-[#e9e2ff]",
     icon: Shapes,
   },
   {
-    title: "One code. Everyone in.",
-    text: "Share a room code. Players pick a nickname and join from any phone.",
+    title: "Share a code",
+    text: "Players join from any device.",
     color: "bg-[#e9f4ce]",
     icon: MousePointer2,
   },
   {
-    title: "Let the good guesses roll.",
-    text: "Play, reveal, celebrate. Take the results with you when you’re done.",
+    title: "Play and review",
+    text: "Run live or scheduled. View results when it ends.",
     color: "bg-[#ffe7d9]",
     icon: Trophy,
   },
@@ -51,8 +51,7 @@ export default function Home() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-16 pt-12 sm:px-8 sm:pb-20 sm:pt-20 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:pb-24">
             <div className="relative z-10">
               <span className="eyebrow">
-                <span className="size-2 rounded-full bg-grape" />A little
-                curiosity. A lot of connection.
+                <span className="size-2 rounded-full bg-grape" />Live and scheduled quizzes
               </span>
               <h1 className="mt-6 max-w-xl font-display text-[clamp(3.1rem,5.8vw,5.2rem)] font-extrabold leading-[.98] tracking-[-.065em]">
                 Big questions.
@@ -76,25 +75,21 @@ export default function Home() {
                 </span>
               </h1>
               <p className="mt-8 max-w-[29rem] text-lg leading-relaxed text-ink-soft">
-                Turn a room full of people into a room full of{" "}
-                <span className="font-semibold text-ink">
-                  “ooh, I know this one.”
-                </span>{" "}
-                Create a quiz, share a code, and find your next great moment.
+                Create a quiz, share a code, and play together.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button href="/create" size="lg">
                   Make a quiz <ArrowUpRight className="size-5" />
                 </Button>
                 <Button href="/demo" variant="outline" size="lg">
-                  Take a little test drive
+                  Try the demo
                 </Button>
               </div>
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-semibold text-ink-soft">
                 {[
                   "Free & open source",
                   "No player accounts",
-                  "Made for your people",
+                  "Works on phones",
                 ].map((text) => (
                   <span key={text} className="flex items-center gap-1.5">
                     <Check className="size-3.5 text-grape" strokeWidth={3} />
@@ -106,7 +101,7 @@ export default function Home() {
             <div className="relative mx-auto w-full max-w-md lg:pt-14">
               <div className="absolute -right-4 -top-19 z-10 hidden rotate-6 items-center gap-2 rounded-xl border-2 border-ink bg-lime px-4 py-2 font-display text-sm font-bold shadow-pop sm:flex lg:-top-5">
                 <Sparkles className="size-4" />
-                Good times, zero downloads.
+                No downloads
               </div>
               <div id="join-room" className="relative z-10">
                 <JoinCard />
@@ -114,11 +109,7 @@ export default function Home() {
               <div className="relative z-20 -mt-1 flex items-center justify-center gap-1 sm:-ml-12 sm:justify-start">
                 <QuizBuddy className="w-36 -rotate-6 sm:w-40" />
                 <div className="-ml-4 -rotate-6 font-display text-sm font-bold text-ink-soft">
-                  Meet Quip.
-                  <br />
-                  <span className="font-normal">
-                    Your curious little sidekick.
-                  </span>
+                  Quip
                 </div>
               </div>
               <div className="absolute inset-8 -rotate-6 rounded-[2rem] bg-[#e8e1f7]" />
@@ -127,11 +118,11 @@ export default function Home() {
         </section>
         <div className="border-b border-ink/10 bg-[#eae5f3]">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-9 gap-y-3 px-5 py-5 text-xs font-bold tracking-wide text-ink-soft sm:text-sm">
-            <span className="text-ink">A place for every “what if?”</span>
+            <span className="text-ink">For groups of all sizes</span>
             <span>Campus clubs</span>
-            <span>Classroom aha!s</span>
-            <span>Team brain breaks</span>
-            <span>Friendly rivalries</span>
+            <span>Classrooms</span>
+            <span>Teams</span>
+            <span>Events</span>
           </div>
         </div>
         <section
@@ -140,9 +131,9 @@ export default function Home() {
         >
           <Reveal className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="eyebrow text-grape">Less setup. More showing up.</p>
+              <p className="eyebrow text-grape">How it works</p>
               <h2 className="mt-3 font-display text-4xl font-extrabold tracking-[-.045em] sm:text-5xl">
-                From idea to “I’m in.”
+                Three simple steps
               </h2>
             </div>
             <ArrowDown className="hidden size-9 -rotate-45 text-grape sm:block" />
@@ -174,11 +165,9 @@ export default function Home() {
         </section>
         <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-8 sm:pb-24">
           <Reveal>
-            <p className="eyebrow text-grape">Your room. Your rhythm.</p>
+            <p className="eyebrow text-grape">Choose your format</p>
             <h2 className="mt-3 max-w-xl font-display text-4xl font-extrabold tracking-[-.045em] sm:text-5xl">
-              A quiz for the moment
-              <br />
-              you have in mind.
+              Live or scheduled
             </h2>
           </Reveal>
           <div className="mt-10 grid gap-5 md:grid-cols-2">
@@ -186,14 +175,13 @@ export default function Home() {
               <article className="relative h-full overflow-hidden rounded-[2rem] border-2 border-ink bg-[#e7e0fc] p-7 sm:p-9">
                 <span className="eyebrow">
                   <Radio className="size-4" />
-                  All eyes on the big screen
+                  Live quiz
                 </span>
                 <h3 className="mt-5 font-display text-3xl font-extrabold tracking-tight">
-                  Bring the room to life.
+                  Play together
                 </h3>
                 <p className="mt-3 max-w-xs leading-relaxed text-ink-soft">
-                  One host, everyone in sync. Live answers, dramatic reveals,
-                  and a leaderboard worth cheering for.
+                  Everyone answers the same question at once. Results reveal together.
                 </p>
                 <div
                   aria-hidden="true"
@@ -202,14 +190,14 @@ export default function Home() {
                   <div className="flex items-center gap-3 rounded-xl bg-lime/45 px-3 py-3">
                     <Trophy className="size-5" />
                     <span className="flex-1 font-display font-bold">
-                      The happy guessers
+                      Leaderboard
                     </span>
                     <span className="font-mono text-sm font-bold">2,400</span>
                   </div>
                   <div className="flex items-center gap-3 px-3 py-2">
                     <span className="text-sm">02</span>
                     <span className="flex-1 text-sm font-semibold">
-                      Quiz on my face
+                      Player two
                     </span>
                     <span className="font-mono text-sm">2,100</span>
                   </div>
@@ -220,14 +208,13 @@ export default function Home() {
               <article className="h-full rounded-[2rem] border-2 border-ink bg-[#eaf0d9] p-7 sm:p-9">
                 <span className="eyebrow">
                   <CalendarClock className="size-4" />
-                  Different schedules, same spark
+                  Scheduled quiz
                 </span>
                 <h3 className="mt-5 font-display text-3xl font-extrabold tracking-tight">
-                  Give curiosity some time.
+                  Play on your schedule
                 </h3>
                 <p className="mt-3 max-w-xs leading-relaxed text-ink-soft">
-                  Set an opening and closing time. Let people take your quiz at
-                  their own pace, wherever they are.
+                  Set an opening and closing time. Players complete the quiz at their own pace.
                 </p>
                 <div
                   aria-hidden="true"
@@ -248,7 +235,7 @@ export default function Home() {
                     ))}
                   </div>
                   <p className="mt-3 text-xs text-ink-soft">
-                    A few good questions. Your own little moment.
+                    Progress is saved.
                   </p>
                 </div>
               </article>
@@ -263,12 +250,12 @@ export default function Home() {
               },
               {
                 Icon: Zap,
-                title: "A playful little twist",
-                body: "Optional boosts and safety shields.",
+                title: "Optional powerups",
+                body: "Choose how many each player can use.",
               },
               {
                 Icon: Heart,
-                title: "Yours to make your own",
+                title: "Open source",
                 body: "Open source. Ready to self-host.",
               },
             ].map(({ Icon, title, body }) => (
@@ -289,19 +276,16 @@ export default function Home() {
           <Reveal>
             <div className="relative overflow-hidden rounded-[2rem] bg-ink px-7 py-12 text-paper sm:px-14 sm:py-16">
               <div className="relative z-10 max-w-xl">
-                <p className="eyebrow text-lime">Made for people, by people</p>
+                <p className="eyebrow text-lime">Get started</p>
                 <h2 className="mt-4 font-display text-4xl font-extrabold tracking-[-.045em] sm:text-5xl">
-                  Good questions deserve
-                  <br />a good home.
+                  Ready to make a quiz?
                 </h2>
                 <p className="mt-4 max-w-md leading-relaxed text-paper/70">
-                  Born for campus clubs. Open to everyone. Quizza is a little
-                  corner of the internet for learning, laughing, and playing
-                  together.
+                  Build it, share the code, and start playing.
                 </p>
                 <div className="mt-7 flex flex-wrap items-center gap-5">
                   <Button href="/create" variant="lime">
-                    Let’s make something fun <ArrowRight className="size-4" />
+                    Create a quiz <ArrowRight className="size-4" />
                   </Button>
                   <Link
                     href="https://github.com/USAR-FOSS/Quizza"

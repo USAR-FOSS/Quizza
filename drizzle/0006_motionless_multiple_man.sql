@@ -1,0 +1,1 @@
+CREATE INDEX "answers_attack_target_idx" ON "answers" USING btree ("session_id","powerup_target_id");

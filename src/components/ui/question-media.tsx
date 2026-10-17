@@ -11,10 +11,11 @@ export function QuestionMedia({ url }: { url?: string | null }) {
   return (
     <figure className="mt-5 overflow-hidden rounded-2xl border-2 border-ink/15 bg-paper-2">
       {failedUrl === url ? (
-        <p className="flex items-center justify-center gap-2 p-6 text-sm text-ink-soft">
+        <div className="flex items-center justify-center gap-2 p-6 text-sm text-ink-soft">
           <ImageOff className="size-5" />
-          This media couldn’t load.
-        </p>
+          Media unavailable.
+          <button type="button" className="font-bold underline" onClick={() => setFailedUrl(null)}>Retry</button>
+        </div>
       ) : kind === "video" ? (
         <video
           src={url}
@@ -36,10 +37,12 @@ export function QuestionMedia({ url }: { url?: string | null }) {
         // Arbitrary host-provided URLs load directly, without a server image proxy.
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={url}
           src={url}
           alt="Question illustration"
           referrerPolicy="no-referrer"
-          className="max-h-72 w-full object-contain"
+          loading="eager"
+          className="max-h-72 min-h-24 w-full object-contain"
           onError={() => setFailedUrl(url)}
         />
       )}

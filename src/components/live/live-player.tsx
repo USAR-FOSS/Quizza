@@ -8,6 +8,7 @@ import {
   api,
   ApiClientError,
   type AnswerResult,
+  type Results,
   type SessionPublic,
 } from "@/lib/api-client";
 import { useEventStream } from "@/lib/use-event-stream";
@@ -21,8 +22,9 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "@/components/ui/question-media";
-import { PowerupPicker } from "@/components/live/powerup-picker";
-import type { Powerup } from "@/lib/powerups";
+import { PowerupIntro, PowerupPicker } from "@/components/live/powerup-picker";
+import { AnswerReview } from "@/components/live/answer-review";
+import { powerupsLeft, type Powerup } from "@/lib/powerups";
 import { LoadingState } from "@/components/ui/loading-state";
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
 import { WordCloud } from "@/components/ui/word-cloud";
@@ -111,7 +113,7 @@ export function LivePlayer({ code }: { code: string }) {
   if (!session) {
     return (
       <Screen>
-        <LoadingState label="Finding your people…" />
+        <LoadingState label="Loading room…" />
       </Screen>
     );
   }
@@ -154,6 +156,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
   const { data: snap, connection } = useEventStream<PlayerSnapshot>(url);
   const [answeredFor, setAnsweredFor] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, AnswerResult>>({});
+  const [finalResults, setFinalResults] = useState<Results | null>(null);
   const [answerError, setAnswerError] = useState("");
   const [usedPowerups, setUsedPowerups] = useState<Powerup[]>([]);
   const [previousAnswers, setPreviousAnswers] = useState<string[]>([]);
@@ -177,6 +180,15 @@ function Connected({ code, me }: { code: string; me: Identity }) {
     };
   }, [code, me.clientToken, snap?.phase, q?.id]);
 
+  useEffect(() => {
+    if (snap?.phase !== "ended") return;
+    let alive = true;
+    api.getResults(code).then((value) => {
+      if (alive) setFinalResults(value);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [code, snap?.phase]);
+
   // reset per-question state when the question changes
   useEffect(() => {
     if (q?.startedAt) startRef.current = new Date(q.startedAt).getTime();
@@ -187,6 +199,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
     textValue?: string;
     numberValue?: number;
     powerup?: Powerup;
+    powerupTargetId?: string;
   }) {
     if (!q || answeredFor === q.id) return;
     setAnsweredFor(q.id);
@@ -223,7 +236,9 @@ function Connected({ code, me }: { code: string; me: Identity }) {
         err.code === "powerup_used" &&
         payload.powerup
       )
-        setUsedPowerups((used) => [...used, payload.powerup!]);
+        void api.getProgress(code, me.clientToken).then((progress) =>
+          setUsedPowerups(progress.usedPowerups),
+        ).catch(() => {});
     }
   }
 
@@ -235,7 +250,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
           <p role="status" className="mt-4 text-sm text-ink-soft">
             {connection === "reconnecting"
               ? "Reconnecting… Check your connection or rejoin the room."
-              : "Finding your people…"}
+              : "Loading room…"}
           </p>
         </div>
       </Screen>
@@ -294,14 +309,12 @@ function Connected({ code, me }: { code: string; me: Identity }) {
           {snap.phase === "lobby" && (
             <Panel
               key="lobby"
-              title="You’ve found your people."
-              body={`${snap.participantCount} in the room. The host will start your first round.`}
+              title="Waiting for host"
+              body={`${snap.participantCount} in the room.`}
             >
               <QuizCover quiz={snap.quiz} />
+              <PowerupIntro types={snap.quiz.powerupTypes ?? []} uses={snap.quiz.powerupUses ?? 1} />
               <LobbyCrowd players={snap.leaderboard} meId={me.participantId} />
-              <p className="mt-4 text-xs text-ink-soft">
-                Choose → lock in → reveal together. Keep this tab open.
-              </p>
             </Panel>
           )}
 
@@ -312,6 +325,8 @@ function Connected({ code, me }: { code: string; me: Identity }) {
               answered={answeredFor === q.id || previousAnswers.includes(q.id)}
               onAnswer={answer}
               usedPowerups={usedPowerups}
+              code={code}
+              me={me}
             />
           )}
 
@@ -330,6 +345,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
               snap={snap}
               meId={me.participantId}
               mine={mine}
+              results={finalResults}
             />
           )}
         </AnimatePresence>
@@ -345,6 +361,8 @@ function QuestionLive({
   answered,
   onAnswer,
   usedPowerups,
+  code,
+  me,
 }: {
   snap: PlayerSnapshot;
   answered: boolean;
@@ -353,8 +371,11 @@ function QuestionLive({
     textValue?: string;
     numberValue?: number;
     powerup?: Powerup;
+    powerupTargetId?: string;
   }) => void;
   usedPowerups: Powerup[];
+  code: string;
+  me: Identity;
 }) {
   const q = snap.question!;
   const [remaining, setRemaining] = useState(q.timeLimitSec);
@@ -364,13 +385,23 @@ function QuestionLive({
     numberValue?: number;
   } | null>(null);
   const [powerup, setPowerup] = useState<Powerup>();
-  const availablePowerup =
-    powerup && !usedPowerups.includes(powerup) ? powerup : undefined;
+  const [targetId, setTargetId] = useState<string>();
+  const [choiceError, setChoiceError] = useState("");
+  const uses = snap.quiz.powerupUses ?? 1;
+  const availablePowerup = powerup && powerupsLeft(uses, usedPowerups) > 0 ? powerup : undefined;
   const lock = (payload: {
     optionId?: string;
     textValue?: string;
     numberValue?: number;
-  }) => onAnswer({ ...payload, powerup: availablePowerup });
+  }) => {
+    if (availablePowerup === "attack" && !targetId) {
+      setChoiceError("Pick a player for your attack, or choose another powerup.");
+      return;
+    }
+    setChoiceError("");
+    onAnswer({ ...payload, powerup: availablePowerup,
+      powerupTargetId: availablePowerup === "attack" ? targetId : undefined });
+  };
 
   useEffect(() => {
     const started = q.startedAt ? new Date(q.startedAt).getTime() : Date.now();
@@ -415,6 +446,9 @@ function QuestionLive({
           style={{ width: `${pct}%` }}
         />
       </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10" role="progressbar" aria-label="Quiz progress" aria-valuenow={q.index + 1} aria-valuemin={0} aria-valuemax={q.total}>
+        <div className="h-full rounded-full bg-mint transition-[width]" style={{ width: `${((q.index + 1) / q.total) * 100}%` }} />
+      </div>
       <h1 className="mt-6 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
         {q.prompt}
       </h1>
@@ -425,10 +459,17 @@ function QuestionLive({
           <PowerupPicker
             selected={availablePowerup}
             used={usedPowerups}
+            uses={uses}
+            available={snap.quiz.powerupTypes ?? []}
             onChange={setPowerup}
             disabled={remaining <= 0}
+            code={code}
+            clientToken={me.clientToken}
+            targetId={targetId}
+            onTargetChange={setTargetId}
           />
         )}
+      {choiceError && <p role="alert" className="mt-2 text-sm font-semibold text-coral">{choiceError}</p>}
 
       {answered ? (
         <div
@@ -587,19 +628,21 @@ function RevealLive({
             )}
           </div>
           <h2 className="mt-3 font-display text-2xl font-extrabold text-ink">
-            {result.isCorrect
-              ? `${["Right on.", "You had that one.", "Nicely spotted.", "That’s the one!"][q.index % 4]} +${result.pointsAwarded}`
-              : [
-                  "A plot twist. Next round?",
-                  "One to remember.",
-                  "Close the gap next round.",
-                  "Now you know.",
-                ][q.index % 4]}
+            {result.isCorrect ? `Correct · +${result.pointsAwarded}` : "Incorrect"}
           </h2>
         </div>
       )}
 
+      {result && (result.attackStolen || result.attackBlocked || result.attackedLoss) ? (
+        <div role="status" className="mb-5 rounded-2xl border border-ink/15 bg-sun/15 p-3 text-center text-sm font-bold text-ink">
+          {result.attackBlocked ? "Your attack hit a shield. No points moved." : null}
+          {!result.attackBlocked && result.attackStolen ? `Your attack stole ${result.attackStolen} points.` : null}
+          {result.attackedLoss ? ` An attack took ${result.attackedLoss} points from you.` : null}
+        </div>
+      ) : null}
+
       <h1 className="font-display text-xl font-bold text-ink">{q.prompt}</h1>
+      <QuestionMedia url={q.mediaUrl} />
       {q.type === "word_cloud" && (
         <WordCloud values={snap.reveal?.textValues ?? []} />
       )}
@@ -660,6 +703,21 @@ function RevealLive({
           with <span className="font-extrabold text-ink">{mine.score}</span>
         </p>
       )}
+      {snap.leaderboard.length > 0 && (
+        <div className="mt-6 rounded-2xl border-2 border-ink/15 bg-white/70 p-4">
+          <h3 className="font-display text-lg font-extrabold">Standings after this round</h3>
+          <div className="mt-2 space-y-1.5">
+            {snap.leaderboard.slice(0, 5).map((entry) => (
+              <div key={entry.participantId} className={cn("flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm", entry.participantId === meId && "bg-grape/10")}>
+                <span className="w-5 font-bold tabular-nums">{entry.rank}</span>
+                <Avatar name={entry.nickname} color={entry.avatarColor} src={entry.avatarUrl} size="sm" />
+                <span className="min-w-0 flex-1 truncate font-semibold">{entry.nickname}</span>
+                <span className="font-bold tabular-nums">{entry.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -668,10 +726,12 @@ function FinalBoard({
   snap,
   meId,
   mine,
+  results,
 }: {
   snap: PlayerSnapshot;
   meId: string;
   mine?: { rank: number; score: number };
+  results: Results | null;
 }) {
   return (
     <motion.div
@@ -719,6 +779,10 @@ function FinalBoard({
           </div>
         ))}
       </div>
+      {!snap.leaderboard.length && (
+        <p className="mt-5 text-sm text-ink-soft">The host chose to keep the final standings private.</p>
+      )}
+      <AnswerReview results={results} />
     </motion.div>
   );
 }

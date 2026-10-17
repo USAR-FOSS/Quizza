@@ -143,7 +143,7 @@ export function ResultsView({ code }: { code: string }) {
           </p>
         )}
         {status === "loading" ? (
-          <LoadingState label="Counting the clever guesses…" />
+          <LoadingState label="Loading results…" />
         ) : status === "notfound" ? (
           <p className="py-20 text-center text-ink-soft">
             No results for code {code}.
@@ -152,7 +152,7 @@ export function ResultsView({ code }: { code: string }) {
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
-                The room, in review.
+                Results
               </h1>
               <span className="font-display text-sm font-bold text-ink-soft">
                 {results.totalParticipants}{" "}
@@ -162,9 +162,7 @@ export function ResultsView({ code }: { code: string }) {
               </span>
             </div>
             <p className="mt-2 text-sm text-ink-soft">
-              {results.over
-                ? "Good questions. Great company. Here’s how it all played out."
-                : "The game is still on. Results update as your people play."}
+              {results.over ? "Final results" : "Updates while the quiz is open."}
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3">
               {[
@@ -223,8 +221,8 @@ export function ResultsView({ code }: { code: string }) {
                   )}
                   <p className="text-sm text-ink-soft">
                     {!results.showBoard
-                      ? "The host’s leaderboard policy keeps standings private right now."
-                      : "The first good guess is still on its way."}
+                      ? "Leaderboard hidden by settings."
+                      : "No scores yet."}
                   </p>
                 </div>
               ) : (

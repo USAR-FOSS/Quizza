@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Trophy, Users, Shuffle } from "lucide-react";
+import { Eye, Trophy, Users, Shuffle, Sparkles } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import {
   REVEAL_OPTIONS,
@@ -11,6 +11,7 @@ import {
   participationMode,
 } from "@/lib/quiz-policy";
 import type { QuizSettings } from "@/lib/db/schema-types";
+import { POWERUP_INFO, POWERUP_ORDER, powerupUses } from "@/lib/powerups";
 import { cn } from "@/lib/utils";
 
 export function QuizSettingsPanel({
@@ -79,16 +80,45 @@ export function QuizSettingsPanel({
       </div>
 
       <div className="mt-6">
-        <h3 className="font-display font-bold">Make it a game</h3>
+        <h3 className="flex items-center gap-2 font-display font-bold"><Sparkles className="size-4" /> Make it a game</h3>
         <p className="mb-2 text-sm text-ink-soft">
-          Each player gets one double-points boost and one safety shield. Keep
-          off for assessments.
+          Introduce these before play, then let each player choose whether to
+          spend one on a question. Keep them off for assessments.
         </p>
         <Toggle
           label="Enable powerups"
           on={settings.powerups ?? false}
           onChange={(v) => onChange({ powerups: v })}
         />
+        {settings.powerups && (
+          <div className="mt-3 space-y-3 rounded-2xl border border-ink/15 bg-white/60 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Total powerups per player</p>
+            <div className="flex gap-2">
+              {([1, 2, 3] as const).map((count) => (
+                <button key={count} type="button" aria-pressed={powerupUses(settings) === count}
+                  onClick={() => onChange({ powerupUses: count })}
+                  className={cn("min-h-11 flex-1 rounded-xl border-2 font-display font-bold transition-colors", powerupUses(settings) === count ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}
+                >{count} {count === 1 ? "powerup" : "powerups"}</button>
+              ))}
+            </div>
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Available powerups</p>
+            {POWERUP_ORDER.map((powerup) => {
+              const selected = (settings.powerupTypes ?? POWERUP_ORDER).includes(powerup);
+              return (
+                <Toggle key={powerup}
+                  label={`${POWERUP_INFO[powerup].name}${POWERUP_INFO[powerup].liveOnly ? " · live only" : ""}`}
+                  on={selected}
+                  onChange={() => {
+                    const current = settings.powerupTypes ?? POWERUP_ORDER;
+                    const next = selected ? current.filter((item) => item !== powerup) : [...current, powerup];
+                    if (next.length) onChange({ powerupTypes: next });
+                  }}
+                />
+              );
+            })}
+            <p className="text-xs text-ink-soft">Shield blocks attacks. Attack targets one other player and resolves at the live reveal. In scheduled quizzes, only Double up and Safety net appear.</p>
+          </div>
+        )}
         <div className="mt-2">
           <Toggle
             label="Reward faster answers"

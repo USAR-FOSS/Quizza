@@ -29,8 +29,9 @@ Goals:
 - Results and leaderboards ranked by accuracy and speed.
 - A clean, smooth UI.
 
-Non-goals for the near term (tracked as roadmap, not dropped): powerups,
-in-question multimedia pipelines, quests, and horizontal multi-region scale.
+Non-goals for the near term (tracked as roadmap, not dropped): a broader
+powerup catalog, rich media pipelines beyond current uploads, quests, and
+horizontal multi-region scale.
 
 ## 3. Context (C4 level 1)
 
@@ -93,15 +94,17 @@ Containers:
 
 - Next.js application (single deployable): server-rendered pages, the builder,
   the presenter and player UIs, server actions for internal builder CRUD, the
-  versioned REST API under `/api/v1`, and the SSE endpoint. Runs on the Node.js
-  runtime (not edge) so the in-process bus and streaming work.
+  versioned REST API under `/api/v1`, and the reconnectable SSE endpoint. Runs
+  on the Node.js runtime so Redis subscriptions and streaming work.
 - PostgreSQL: the system of record.
+- Redis: cross-instance Pub/Sub, short-lived answer counters, and rate limits.
+- QStash: signed delayed callbacks for automatic live reveals.
 - FOSSClub OIDC: external identity provider for hosts.
 - Object storage (roadmap): media for questions.
 
-Scale-out note: at the PRD target the app runs as multiple instances behind a
-load balancer, with the in-process bus replaced by a shared backplane. See
-section 9.
+Scale-out note: live mode runs across multiple serverless instances through the
+Redis backplane. Pub/Sub is ephemeral, so reconnecting SSE streams rebuild from
+Postgres. See section 9 and ADR 0021.
 
 ## 5. Components (C4 level 3)
 
@@ -298,22 +301,18 @@ needed.
 
 ### 9.3 Design response
 
-- Single instance is sufficient for this target. One Node process holds 1000 to
-  2000 SSE connections comfortably, and Postgres absorbs tens to a few hundred
-  small indexed inserts per second with headroom.
-- Connection pool: a modest pool (around 15 to 20 connections) covers the live
-  burst, since each insert completes in a few milliseconds. No external pooler is
-  required at this scale.
-- Stability over 4 hours is the real requirement: SSE streams must be
-  unsubscribed and cleaned up on disconnect, no unbounded in-memory growth, and
-  idle timeouts on streams. These are correctness concerns, not capacity ones.
+- Vercel functions are horizontally distributed; one Redis subscriber per warm
+  instance fans out to all local SSE streams. Postgres is pooled and bounded per
+  function (`DB_POOL_MAX=5` by default on Vercel).
+- Stability over four hours remains a requirement: SSE streams must be
+  unsubscribed, rotated before the platform duration limit, and cleaned up on
+  disconnect, with no unbounded memory growth.
 - Fan-out discipline (already decided): phase changes broadcast one snapshot to
   all; live answer counts go only to the presenter connection; never rebroadcast
   per answer to all players.
-- Contingency only: if a future event exceeds this target, scale out per ADR
-  0015 (horizontal instances, a `LISTEN/NOTIFY` or Redis backplane behind the bus
-  interface, a Postgres pooler). This is designed but deliberately not built,
-  because the operating target does not need it.
+- Capacity is not yet a verified claim. Run the multi-instance load harness
+  before promising the PRD target, and move only the SSE tier to a long-running
+  service if Vercel stream duration or cost becomes the limiting factor.
 
 ## 10. Feature scope and phasing
 
@@ -321,13 +320,13 @@ MVP (in progress):
 
 - Builder with six question types, per-question time and points (done).
 - REST API with OpenAPI (done).
-- Scheduled mode UI and live mode UI (next).
+- Scheduled mode UI and live mode UI (done; capacity validation remains).
 - Host sign-in (OIDC and email/password) and quiz ownership.
 - Results with ranking by accuracy and speed; per-question leaderboard.
 
 Post-MVP (roadmap, data model has extension points):
 
-- Powerups (shield, attack, hint) with a catalog and a per-participant ledger.
+- A larger powerup catalog (for example hints) and richer per-player analytics.
 - In-question multimedia with object storage.
 - Custom participant data fields collected by the host at join.
 - Quests and other engagement mechanics.
@@ -335,42 +334,50 @@ Post-MVP (roadmap, data model has extension points):
 
 ## 11. Deployment view
 
-### 11.1 Target deployment (single instance)
+### 11.1 Target deployment (scaled out)
 
-This is the deployment for the operating target in section 9. It is the default
-and the only one needed for 1000 to 2000 participants.
+This is the production live-mode target. Capacity remains unclaimed until the
+Preview load thresholds in the realtime plan have been measured.
 
 ```mermaid
 flowchart TB
   proxy[Reverse proxy<br/>TLS, HTTP/2, no SSE buffering]
-  subgraph container[Docker container]
-    app[quizza<br/>standalone Next server, in-process bus]
+  subgraph container[Next.js/Vercel functions]
+    app[quizza<br/>REST + reconnectable SSE]
   end
-  db[(PostgreSQL 16)]
-  proxy --> app --> db
+  db[(PostgreSQL 16<br/>source of truth)]
+  redis[(Redis<br/>Pub/Sub, counters, limits)]
+  qstash[QStash<br/>durable reveal callbacks]
+  proxy --> app
+  app --> db
+  app <--> redis
+  app --> qstash
 ```
 
-- The app ships as a Docker image: a multi-stage build producing Next's
-  standalone server (ADR 0019). The single-instance target is one app container
-  plus Postgres. `docker compose up --build` starts Postgres, runs migrations
-  once, then starts the app.
-- The pub/sub bus is in-process; no pooler and no backplane are required at this
-  target.
+- The app can run as Vercel functions or as a multi-stage Docker image producing
+  Next's standalone server (ADR 0019). `docker compose up --build` starts
+  Postgres and Redis, runs migrations once, then starts one local app instance.
+- Redis Pub/Sub is the production backplane. A per-instance local registry
+  shares one Redis subscription across that instance's SSE requests. Pub/Sub is
+  ephemeral, so every stream reconnects to a fresh Postgres snapshot.
 - The reverse proxy must disable response buffering for the SSE route (for
   example `X-Accel-Buffering: no`) and use HTTP/2 so streams multiplex per
   client.
-- Give the Postgres pool headroom (around 15 to 20 connections) for live submit
-  bursts.
+- Use a pooled Postgres URL and keep each serverless instance's pool bounded
+  (`DB_POOL_MAX`, default 5 on Vercel). Redis answer counters avoid a database
+  count and full-room broadcast after every answer.
 - Migrations run as a one-shot `migrate` service (compose) before the app
   starts, or manually with `pnpm db:generate` then `pnpm db:migrate`. See ADR
   0003.
-- Scaling later is a replica-count change: run N app containers behind the load
-  balancer and switch the bus to the shared backplane (section 11.2, ADR 0015).
+- Scaling later is a replica-count change: run N app containers behind a load
+  balancer while retaining the Redis backplane, or move only the SSE tier to a
+  dedicated long-running service if measured Vercel stream economics require it.
 
-### 11.2 Contingency deployment (scaled out)
+### 11.2 Contingency deployment (dedicated realtime tier)
 
-Only if a future event exceeds the operating target. Not required today; built
-only when the numbers demand it. See ADR 0015.
+Use this deployment for live mode. A future dedicated realtime tier remains an
+option if measured Vercel SSE concurrency or cost is unacceptable. See ADR
+0021 and the load-test runbook.
 
 ```mermaid
 flowchart TB
@@ -382,7 +389,7 @@ flowchart TB
   end
   pooler[PgBouncer]
   db[(PostgreSQL 16)]
-  backplane[(LISTEN/NOTIFY or Redis)]
+  backplane[(Redis Pub/Sub)]
 
   lb --> a1 & a2 & an
   a1 & a2 & an --> pooler --> db
@@ -396,11 +403,13 @@ flowchart TB
   question view token with a timestamp would make it authoritative (threat
   model, Tampering).
 - Join codes are six digits. They authorize only participant actions, never host
-  control, but brute force and join flooding need rate limiting at scale.
+  control. Distributed Redis rate limiting mitigates brute force and join
+  flooding; participant caps and stream-specific limits remain open.
 - Quiz ownership checks depend on host auth, which is not yet implemented; until
   then a quiz link grants edit access (acceptable pre-release only).
-- NOTIFY throughput at the high end is unproven for this workload; Redis is the
-  documented fallback.
+- Redis/QStash live-mode throughput and cost remain unproven until the load
+  harness in `docs/realtime-scale-plan.md` is run against a production-like
+  Preview deployment.
 
 ## 13. References and inspirations
 

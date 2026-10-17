@@ -252,7 +252,8 @@ and ADRs for context.
 - Host auth: `users.password_hash`, `users.role`, `users.member`.
 - Custom participant fields: a `participant_fields` definition on the quiz plus a
   `participant_responses` store, so hosts can collect required data (PRD).
-- Powerups: a `powerups` catalog and per-participant `powerup_uses` ledger.
+- A standalone powerup catalog and per-participant use ledger; today the four
+  configurable powers and their uses are stored in quiz settings and answers.
 - Media: `questions.media_url` exists; an uploads table or object-store
   references will accompany it.
 - Scheduled attempt tracking: a per-participant attempt start time to measure

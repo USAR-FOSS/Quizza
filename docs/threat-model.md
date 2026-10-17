@@ -31,6 +31,7 @@ flowchart LR
   end
   subgraph tb2[Boundary: data]
     db[(Postgres)]
+    redis[(Redis + QStash)]
   end
   subgraph ext[External]
     oidc[(FOSSClub OIDC)]
@@ -38,6 +39,7 @@ flowchart LR
   bp -->|JSON, EventSource| app
   bh -->|JSON, OIDC redirect| app
   app --> db
+  app --> redis
   app -->|auth code + PKCE| oidc
 ```
 
@@ -55,7 +57,7 @@ TLS.
 | Impersonate a host and control a session | Guess or steal `host_token` | 32-char high-entropy token (nanoid), returned only once at creation, never exposed by any read endpoint | Done |
 | Impersonate another participant | Guess `client_token` | 32-char high-entropy token; unique per session and participant | Done |
 | Fake host identity at sign-in | Forged OIDC assertion | Authorization code flow with PKCE (S256), state and nonce, RS256 ID token verified against JWKS with issuer/audience/nonce checks, client_secret_basic token auth | Code-complete; live pending provider client registration (0012) |
-| Join code guessing to enter a room | Six-digit code | Codes grant only participant actions, never host control; add rate limiting and lockout at scale | Partial, rate limiting Planned |
+| Join code guessing to enter a room | Six-digit code | Codes grant only participant actions, never host control; distributed Redis rate limiting applies across instances | Mitigated; capacity testing open |
 
 ### Tampering
 
@@ -88,11 +90,14 @@ TLS.
 
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
-| Submit storm | Live burst of a few hundred submits when a question closes | Small indexed inserts, a Postgres pool with headroom (15 to 20); single instance absorbs the operating target (ADR 0018). Pooling and coalescing only if scaled out | Partial |
-| Join flooding | Mass anonymous participant creation | Rate limiting per IP, optional proof-of-work or captcha, per-session participant caps | Planned |
-| SSE connection exhaustion | Open many streams | Horizontal instances, per-IP connection limits, idle timeouts | Planned (0015) |
-| Code brute force | Rapid guesses against join codes | Rate limiting and lockout on the join and session-info endpoints | Planned |
+| Submit storm | Live burst of a few hundred submits when a question closes | Indexed inserts, pooled Postgres, Redis answer counters, and no full-snapshot broadcast per answer | Mitigated; capacity testing open |
+| Join flooding | Mass anonymous participant creation | Distributed Redis rate limiting per IP; participant caps remain planned | Partial |
+| SSE connection exhaustion | Open many streams | Cross-instance Redis fan-out, bounded stream lifetime, reconnects, and cleanup; per-IP stream limits remain planned | Partial |
+| Code brute force | Rapid guesses against join codes | Redis rate limiting on join and session-info endpoints | Mitigated; capacity testing open |
 | Oversized payloads | Large bodies to API | zod max lengths on all string fields; body size limits at the proxy | Partial |
+| Redis credential theft | Read or publish to the backplane | TLS Redis URL, provider ACLs, environment-only secrets, namespaced UUID channels, envelope validation, and no tokens in events | Mitigated |
+| Forged or replayed reveal callback | POST directly to the internal reveal route | Verify QStash signature with current/next signing keys; exact session/question/start-time conditional update makes replay harmless | Mitigated |
+| Pub/Sub message loss | Redis subscriber disconnects during a phase change | Pub/Sub is treated as ephemeral; SSE reconnects build a fresh Postgres snapshot, and QStash retries reveal callbacks | Accepted with recovery |
 
 ### Elevation of privilege
 

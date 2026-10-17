@@ -41,7 +41,6 @@ async function Inner() {
       .orderBy(desc(sessions.createdAt))
       .limit(8),
   ]);
-  const firstName = user.name?.split(" ")[0] || "friend";
   const active = (s: (typeof recentSessions)[number]) => s.active;
   return (
     <>
@@ -53,19 +52,19 @@ async function Inner() {
       </div>
       <section className="relative overflow-hidden rounded-[2rem] border border-ink/15 bg-[#e9e2f7] px-6 py-8 sm:p-9">
         <div className="relative z-10 max-w-lg">
-          <p className="eyebrow text-grape">Your quiz corner</p>
+          <p className="eyebrow text-grape">Dashboard</p>
           <h1 className="mt-3 font-display text-3xl font-extrabold tracking-[-.045em] sm:text-4xl">
-            Hey {firstName}, what’s the big question?
+            Your quizzes
           </h1>
           <p className="mt-3 max-w-sm text-ink-soft">
-            A fresh idea or an old crowd favorite. Get your people playing.
+            Create, manage, and launch your quizzes.
           </p>
           <Link
             href="/create"
             className="mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-ink bg-grape px-5 py-3 font-display font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5"
           >
             <Plus className="size-4" />
-            Make a new quiz
+            New quiz
           </Link>
         </div>
         <QuizBuddy className="absolute -bottom-3 right-3 hidden w-52 rotate-6 lg:block" />
