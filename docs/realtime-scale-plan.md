@@ -5,8 +5,8 @@ combine steps, and do not start the next step until the current step's checks
 pass.
 
 Current implementation status: sections 1–9 are implemented in the current
-worktree. Section 10 has an opt-in k6 SSE load harness and paced participant
-preparation script. Its real two-process integration run, Redis restart test,
+worktree. Section 10 has an opt-in two-process smoke runner, a k6 SSE load
+harness, and a paced participant preparation script. Its real two-process run, Redis restart test,
 and 50→1,000-player Preview runs remain open until Redis/QStash resources and
 a prepared Preview room are available. Sections 11–13 remain the operational
 handoff and acceptance checklist.

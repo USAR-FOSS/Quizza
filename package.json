@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:load:live": "k6 run scripts/load/live.js",
+    "test:integration:realtime": "node scripts/integration/two-instance.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env.local src/lib/db/migrate.ts",
     "db:push": "drizzle-kit push",

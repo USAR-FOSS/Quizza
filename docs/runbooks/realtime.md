@@ -56,6 +56,22 @@ guards used by the application.
 
 ## Load test
 
+Before the capacity stages, run the two-process smoke check with a fresh local
+live room containing at least two short questions. Build the app, make sure
+Postgres and a standard Redis endpoint are reachable from the host, and run:
+
+```bash
+ROOM_CODE=ABC123 HOST_TOKEN=... REDIS_URL=redis://localhost:6379 \
+  DATABASE_URL=postgres://... pnpm test:integration:realtime
+```
+
+The script starts two production Next processes on ports 3101 and 3102,
+checks cross-instance join/start/answer count/reveal/next/end, and confirms an
+SSE reconnect restores the current phase. It uses the explicit localhost timer
+fallback; QStash callback delivery must be checked separately in Preview.
+For a Redis outage drill, restart Redis during an active Preview room and
+verify clients reconnect to the Postgres snapshot before continuing.
+
 Use a dedicated Preview quiz with exactly five questions and a fresh live room.
 Install k6 with its `k6/x/sse` extension. The extension is required because a
 normal k6 HTTP request waits for the SSE response to end. First prepare real
