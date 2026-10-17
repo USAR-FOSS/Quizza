@@ -18,7 +18,7 @@ type Result = { ok: true } | { error: string };
 async function throttle(name: string, limit: number): Promise<boolean> {
   const h = await headers();
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-  return rateLimit(`${name}:${ip}`, limit, 60_000).ok;
+  return (await rateLimit(`${name}:${ip}`, limit, 60_000)).ok;
 }
 
 const registerSchema = z.object({

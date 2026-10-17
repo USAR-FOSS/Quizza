@@ -245,3 +245,22 @@ Status values: Accepted, Superseded, Proposed.
   target, and the realtime bus already sits behind an interface, which keeps this
   future split cheap. Revisit when real load approaches the limits in ADR 0015.
 - Status: Proposed (not scheduled; no work now).
+
+## 0021 - Redis Pub/Sub and QStash for horizontally scaled live play
+
+- Context: Vercel functions can be created on different instances and can scale
+  to zero. The in-process event bus, reveal timers, and rate limiter cannot
+  provide reliable live play across those instances.
+- Decision: Postgres remains the source of truth. Standard Redis Pub/Sub carries
+  versioned state, roster, and host-only answer-count events across instances;
+  a local subscription registry fans each Redis channel out to the SSE streams
+  in that instance. Redis counters handle host answer counts and fixed-window
+  rate limits. QStash sends a signed, delayed reveal callback. The callback is
+  idempotent and conditionally updates the exact session/question/start-time
+  tuple. SSE streams rotate before the platform duration limit and reconnect to
+  rebuild state from Postgres because Pub/Sub is at-most-once.
+- Consequences: Redis and QStash are required for production live mode. A Redis
+  outage may delay UI fan-out but cannot corrupt durable answers or reveal state.
+  Load testing must measure SSE duration, function concurrency, Redis subscriber
+  count, database pool usage, reveal skew, and cost before claiming capacity.
+- Status: Implemented; capacity validation remains open.

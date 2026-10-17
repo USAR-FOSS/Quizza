@@ -9,7 +9,8 @@ import { generateToken } from "@/lib/codes";
 type Ctx = { params: Promise<{ code: string }> };
 
 export const POST = handle<Ctx>(async (req: NextRequest, { params }) => {
-  enforceRateLimit(req, "join", 30, 60_000);
+  // Shared school/event Wi-Fi often means hundreds of players share one IP.
+  await enforceRateLimit(req, "join", 1_500, 60_000);
   const { code } = await params;
   const body = await parseBody(req, JoinBody);
 

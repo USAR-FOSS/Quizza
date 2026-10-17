@@ -66,9 +66,14 @@ duplicating a quiz copies its referenced uploaded assets so deleting the origina
 does not break the copy. Old/replaced uploads count toward the allowance until
 their quiz or player is deleted; standalone asset cleanup remains future work.
 
-Live deadlines and broadcasts require a long-running single Node process.
-Serverless scale-to-zero and multi-instance deployments need a durable scheduler
-and shared event backplane before relying on synchronized live play.
+Live deadlines and broadcasts use Redis plus QStash in production. The remaining
+open item is measured multi-instance capacity and cost at the PRD's full
+concurrency target; do not claim that target from unit tests alone.
+
+New production environment variables are documented in `.env.example` and
+`docs/deployment.md`: `REDIS_URL`, `REALTIME_DRIVER=redis`, `APP_URL`,
+`QSTASH_TOKEN`, both QStash signing keys, and `DB_POOL_MAX`. No database
+migration is required for this realtime change.
 
 ## Validation
 

@@ -40,6 +40,7 @@ vi.mock("@/lib/db", () => {
 });
 vi.mock("@/lib/realtime/snapshot", () => ({ publishState: vi.fn() }));
 vi.mock("@/lib/realtime/notifications", () => ({
+  resetAnswerCounter: vi.fn(),
   scheduleAnswerCount: vi.fn(),
   scheduleRoster: vi.fn(),
 }));

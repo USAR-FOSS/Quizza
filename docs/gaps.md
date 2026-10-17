@@ -46,7 +46,8 @@ smoke checks; production scale has not been load-tested.
   of a secret in a download URL. JSON aggregate summaries are downloadable.
 - Public question aggregates are withheld while a session runs. Results honor
   answer and leaderboard policies. Failed results requests display an error.
-- Answer-count and join notifications coalesce bursts into batches. Live players
+- Answer counts use a Redis counter and host-only tick events; joins use small
+  roster events. Live players
   recover their answered IDs and used powerups after reloading, and see connection
   recovery messages rather than silently losing their place.
 - Quip mascot, redesigned landing/dashboard, no-account interactive demo,
@@ -69,9 +70,10 @@ smoke checks; production scale has not been load-tested.
 
 ### Infrastructure and integrity limits
 
-- SSE pub/sub and rate limits are process-local. Multiple app instances need a
-  shared backend; sticky routing alone is not sufficient for state broadcasts.
-  Automatic live reveals also need a durable scheduler for serverless hosting.
+- Redis Pub/Sub now backs SSE fan-out and Redis-backed fixed-window rate limits
+  are shared across app instances. QStash now owns automatic live reveals, with
+  signed, idempotent callbacks. Pub/Sub remains at-most-once by design, so SSE
+  reconnects always rebuild state from Postgres.
   Current uploads are public by unguessable URL, not private media storage.
 - The PRD's 10 parallel rooms × 1,000 simultaneous players is a target, not a
   verified capacity claim. Run representative DB/SSE load tests and monitor the

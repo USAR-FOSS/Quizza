@@ -1,50 +1,95 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { answers, sessions } from "@/lib/db/schema";
+import { answers, participants } from "@/lib/db/schema";
+import { getRedisPublisher, usesRedisRealtime } from "@/lib/redis/client";
+import { answerCounterKey } from "./channels";
 import { publish } from "./bus";
-import { publishState } from "./snapshot";
 
-// Coalesce joins and answer bursts rather than rebuilding/counting per player.
-const pending = new Map<string, ReturnType<typeof setTimeout>>();
-export function scheduleRoster(sessionId: string) {
-  const key = `roster:${sessionId}`;
-  if (pending.has(key)) return;
-  pending.set(
-    key,
-    setTimeout(() => {
-      pending.delete(key);
-      void publishState(sessionId).catch((err) =>
-        console.error("[realtime] roster", err),
-      );
-    }, 100),
-  );
+const ANSWER_COUNTER_TTL_SECONDS = 6 * 60 * 60;
+
+type ParticipantRecord = {
+  id: string;
+  nickname: string;
+  avatarColor: string;
+  avatarUrl?: string | null;
+  score?: number;
+};
+
+function participantEntry(participant: ParticipantRecord) {
+  return {
+    participantId: participant.id,
+    nickname: participant.nickname,
+    avatarColor: participant.avatarColor,
+    avatarUrl: participant.avatarUrl ?? null,
+    score: participant.score ?? 0,
+    // The lobby does not need a stable rank. The next full snapshot supplies it.
+    rank: 0,
+  };
 }
 
+/** Publishes a small roster delta instead of rebuilding the whole room snapshot. */
+export function scheduleRoster(
+  sessionId: string,
+  participantId: string,
+  joined: boolean,
+) {
+  void (async () => {
+    const participant = await db.query.participants.findFirst({
+      where: and(
+        eq(participants.id, participantId),
+        eq(participants.sessionId, sessionId),
+      ),
+    });
+    if (!participant) return;
+    await publish(sessionId, {
+      kind: "participant_changed",
+      participant: participantEntry(participant),
+      joined,
+    });
+  })().catch((err) => console.error("[realtime] roster", err));
+}
+
+/** Sets the authoritative short-lived counter before a live round opens. */
+export async function resetAnswerCounter(
+  sessionId: string,
+  questionId: string,
+): Promise<void> {
+  if (!usesRedisRealtime()) return;
+  try {
+    const redis = await getRedisPublisher();
+    await redis.set(answerCounterKey(sessionId, questionId), "0", {
+      EX: ANSWER_COUNTER_TTL_SECONDS,
+    });
+  } catch (err) {
+    console.error("[realtime] answer counter reset", err);
+  }
+}
+
+/**
+ * Publishes a host-only answer count. Redis counters avoid a Postgres count and
+ * a full-room snapshot for every answer in a burst. Postgres remains authoritative
+ * and is used for the initial/reconnected snapshot.
+ */
 export function scheduleAnswerCount(sessionId: string, questionId: string) {
-  const key = `answers:${sessionId}:${questionId}`;
-  if (pending.has(key)) return;
-  pending.set(
-    key,
-    setTimeout(() => {
-      pending.delete(key);
-      void (async () => {
-        const current = await db.query.sessions.findFirst({
-          where: eq(sessions.id, sessionId),
-          columns: { currentQuestionId: true, revealed: true },
-        });
-        if (current?.currentQuestionId !== questionId || current.revealed)
-          return;
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(answers)
-          .where(
-            and(
-              eq(answers.sessionId, sessionId),
-              eq(answers.questionId, questionId),
-            ),
-          );
-        publish(sessionId, { kind: "tick", answeredCount: count });
-      })().catch((err) => console.error("[realtime] answers", err));
-    }, 100),
-  );
+  void (async () => {
+    let count: number;
+    if (usesRedisRealtime()) {
+      const redis = await getRedisPublisher();
+      const key = answerCounterKey(sessionId, questionId);
+      count = await redis.incr(key);
+      await redis.expire(key, ANSWER_COUNTER_TTL_SECONDS);
+    } else {
+      const [{ count: dbCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(answers)
+        .where(
+          and(
+            eq(answers.sessionId, sessionId),
+            eq(answers.questionId, questionId),
+          ),
+        );
+      count = dbCount;
+    }
+    await publish(sessionId, { kind: "tick", answeredCount: count });
+  })().catch((err) => console.error("[realtime] answers", err));
 }

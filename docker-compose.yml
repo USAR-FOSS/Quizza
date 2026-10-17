@@ -20,6 +20,16 @@ services:
     # ports:
     #   - "5432:5432"
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+
   # One-shot: applies migrations, then exits. The app waits for it to succeed.
   migrate:
     build:
@@ -38,9 +48,14 @@ services:
       target: runner
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/quizza
+      REDIS_URL: redis://redis:6379
+      REALTIME_DRIVER: redis
+      APP_URL: http://localhost:3000
       NODE_ENV: production
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -53,3 +68,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

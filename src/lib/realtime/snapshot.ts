@@ -9,6 +9,7 @@ import {
   sessions,
 } from "@/lib/db/schema";
 import { publish } from "./bus";
+import { usesRedisRealtime } from "@/lib/redis/client";
 import { canRevealAnswers, canShowLeaderboard } from "@/lib/quiz-policy";
 import { seededShuffle } from "@/lib/shuffle";
 import type { QuizSettings } from "@/lib/db/schema-types";
@@ -91,7 +92,8 @@ export async function buildSnapshots(
     s.status === "active" &&
     !s.revealed &&
     timedQuestion &&
-    s.questionStartedAt
+    s.questionStartedAt &&
+    (!usesRedisRealtime() || !process.env.QSTASH_TOKEN)
   ) {
     const deadline =
       s.questionStartedAt.getTime() + timedQuestion.timeLimitSec * 1000;
@@ -256,7 +258,7 @@ export async function publishState(sessionId: string): Promise<void> {
     .catch(() => {})
     .then(async () => {
       const { player, host } = await buildSnapshots(sessionId);
-      publish(sessionId, { kind: "state", player, host });
+      await publish(sessionId, { kind: "state", player, host });
     });
   broadcasts.set(sessionId, next);
   try {

@@ -11,10 +11,12 @@ import {
 } from "@/lib/db/schema";
 import { HttpError } from "@/lib/api/http";
 import {
+  resetAnswerCounter,
   scheduleRoster,
   scheduleAnswerCount,
 } from "@/lib/realtime/notifications";
 import { publishState } from "@/lib/realtime/snapshot";
+import { scheduleReveal } from "@/lib/realtime/scheduler";
 import { generateJoinCode, generateToken } from "@/lib/codes";
 import { QUESTION_TYPES, OPTION_COLORS } from "@/lib/quiz-constants";
 import { clampResponseMs, computePoints } from "@/lib/scoring";
@@ -467,7 +469,7 @@ export async function joinSession(
         deviceId,
       })
       .returning();
-    if (s.mode === "live") scheduleRoster(s.id);
+    if (s.mode === "live") scheduleRoster(s.id, p.id, true);
     return participantView(p);
   } catch (err) {
     // lost a race on the per-user/per-device unique index: return the winner
@@ -1162,13 +1164,30 @@ export async function controlSession(
     : -1;
 
   let patch: Partial<typeof sessions.$inferInsert>;
+  let scheduledQuestion: {
+    id: string;
+    startedAt: Date;
+    timeLimitSec: number;
+  } | null = null;
   if (action === "start") {
     if (total === 0)
       throw new HttpError(409, "no_questions", "Add questions first");
+    const startedAt = new Date();
+    const question = await db.query.questions.findFirst({
+      where: eq(questions.id, qrows[0].id),
+      columns: { timeLimitSec: true },
+    });
+    if (!question)
+      throw new HttpError(409, "no_questions", "Add questions first");
+    scheduledQuestion = {
+      id: qrows[0].id,
+      startedAt,
+      timeLimitSec: question.timeLimitSec,
+    };
     patch = {
       status: "active",
       currentQuestionId: qrows[0].id,
-      questionStartedAt: new Date(),
+      questionStartedAt: startedAt,
       revealed: false,
     };
   } else if (action === "reveal") {
@@ -1178,10 +1197,22 @@ export async function controlSession(
     if (nextIdx >= total) {
       patch = { status: "ended", revealed: true, endedAt: new Date() };
     } else {
+      const startedAt = new Date();
+      const question = await db.query.questions.findFirst({
+        where: eq(questions.id, qrows[nextIdx].id),
+        columns: { timeLimitSec: true },
+      });
+      if (!question)
+        throw new HttpError(409, "no_questions", "Add questions first");
+      scheduledQuestion = {
+        id: qrows[nextIdx].id,
+        startedAt,
+        timeLimitSec: question.timeLimitSec,
+      };
       patch = {
         status: "active",
         currentQuestionId: qrows[nextIdx].id,
-        questionStartedAt: new Date(),
+        questionStartedAt: startedAt,
         revealed: false,
       };
     }
@@ -1190,6 +1221,24 @@ export async function controlSession(
   } else {
     throw new HttpError(422, "bad_action", "Unknown action");
   }
+
+  if (scheduledQuestion) {
+    await scheduleReveal(
+      {
+        sessionId: s.id,
+        questionId: scheduledQuestion.id,
+        questionStartedAt: scheduledQuestion.startedAt.toISOString(),
+      },
+      scheduledQuestion.startedAt.getTime() +
+        scheduledQuestion.timeLimitSec * 1000,
+    );
+  }
+
+  // Seed the distributed host-only counter before the new round becomes
+  // answerable. A failed conditional update leaves only a short-lived key.
+  if (action === "start") await resetAnswerCounter(s.id, qrows[0].id);
+  else if (action === "next" && curIdx + 1 < total)
+    await resetAnswerCounter(s.id, qrows[curIdx + 1].id);
 
   const changed = await db
     .update(sessions)

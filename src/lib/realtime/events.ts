@@ -71,4 +71,9 @@ export interface HostSnapshot extends PlayerSnapshot {
 
 export type LiveEvent =
   | { kind: "state"; player: PlayerSnapshot; host: HostSnapshot }
-  | { kind: "tick"; answeredCount: number };
+  | { kind: "tick"; answeredCount: number }
+  | {
+      kind: "participant_changed";
+      participant: LiveLeaderboardEntry;
+      joined: boolean;
+    };

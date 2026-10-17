@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:load:live": "k6 run scripts/load/live.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env.local src/lib/db/migrate.ts",
     "db:push": "drizzle-kit push",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@scalar/nextjs-api-reference": "^0.12.9",
+    "@upstash/qstash": "^2.12.0",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.12",
@@ -26,6 +28,7 @@
     "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "redis": "^6.3.0",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.5"
   },
