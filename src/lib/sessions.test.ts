@@ -27,7 +27,7 @@ vi.mock("@/lib/db", () => {
         limit: () => chain,
         for: () => chain,
         then: (resolve: (rows: unknown[]) => void) =>
-          Promise.resolve(selection?.count ? [{ count: 0 }] : (mocks.rows[name] ?? [])).then(resolve),
+          Promise.resolve(selection?.count ? [{ count: (mocks.rows.answers ?? []).filter((row) => Boolean((row as { powerup?: string | null }).powerup)).length }] : (mocks.rows[name] ?? [])).then(resolve),
       };
       return chain;
     },
@@ -44,7 +44,7 @@ vi.mock("@/lib/realtime/notifications", () => ({
   scheduleAnswerCount: vi.fn(),
   scheduleRoster: vi.fn(),
 }));
-import { submitAnswer, getProgress } from "./sessions";
+import { submitAnswer, getProgress, getResults, listQuestions } from "./sessions";
 import { signViewToken } from "./view-token";
 
 const question = {
@@ -182,6 +182,13 @@ describe("answer integrity", () => {
     );
     expect(mocks.update).toHaveBeenCalled();
   });
+  it("shares one powerup charge across different powerup types", async () => {
+    mocks.quiz.mockResolvedValue({ settings: { powerups: true, powerupUses: 1 } });
+    mocks.rows.answers = [{ participantId: "player", powerup: "shield" }];
+    await expect(submitAnswer("123456", { ...input, powerup: "double" }))
+      .rejects.toMatchObject({ code: "powerup_used" });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
   it("does not accept live answers in the scheduled transport grace window", async () => {
     mocks.rows.sessions = [
       { ...session, questionStartedAt: new Date(Date.now() - 20_500) },
@@ -211,5 +218,37 @@ describe("answer integrity", () => {
     expect(mocks.insert).toHaveBeenCalledWith(
       expect.objectContaining({ points: 1000 }),
     );
+  });
+});
+
+describe("scheduled player results", () => {
+  const scheduled = { ...session, mode: "scheduled", status: "active", closesAt: new Date(Date.now() + 3_600_000) };
+  beforeEach(() => {
+    mocks.rows = {
+      sessions: [scheduled],
+      participants: [{ id: "player", clientToken: "token", nickname: "Player", score: 100, joinedAt: new Date(), avatarColor: "mint", avatarUrl: null }],
+      answers: [{ questionId: "question", participantId: "player", optionId: "correct", powerup: null }],
+      question_views: [],
+    };
+    mocks.quiz.mockResolvedValue({ settings: { leaderboard: "at_end", revealAnswers: "at_end" }, questions: [{ ...question, prompt: "Which?", mediaUrl: "/api/v1/uploads/11111111-1111-4111-8111-111111111111", position: 0, options: [
+      { id: "correct", label: "Yes", isCorrect: true, position: 0 },
+      { id: "wrong", label: "No", isCorrect: false, position: 1 },
+    ] }] });
+  });
+  it("shows answers and standings to a player who finished before the room closes", async () => {
+    const result = await getResults("123456", { hostToken: null, clientToken: "token" });
+    expect(result.showBoard).toBe(true);
+    expect(result.showAnswers).toBe(true);
+    expect(result.leaderboard).toHaveLength(1);
+    expect(result.questionStats[0].options[0].isCorrect).toBe(true);
+  });
+  it("keeps unfinished and unauthenticated viewers out of early results", async () => {
+    expect((await getResults("123456", { hostToken: null, clientToken: null })).leaderboard).toEqual([]);
+    mocks.rows.answers = [];
+    expect((await getResults("123456", { hostToken: null, clientToken: "token" })).leaderboard).toEqual([]);
+  });
+  it("keeps uploaded question images in the scheduled player payload", async () => {
+    const list = await listQuestions("123456", "token");
+    expect(list.questions[0].mediaUrl).toBe("/api/v1/uploads/11111111-1111-4111-8111-111111111111");
   });
 });

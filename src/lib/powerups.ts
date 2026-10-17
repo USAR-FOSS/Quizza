@@ -14,6 +14,10 @@ export function powerupUses(settings: QuizSettings | null | undefined): number {
   return Math.max(1, Math.min(3, settings?.powerupUses ?? 1));
 }
 
+export function powerupsLeft(uses: number, used: Powerup[]): number {
+  return Math.max(0, uses - used.length);
+}
+
 export function enabledPowerups(settings: QuizSettings | null | undefined, mode: "live" | "scheduled"): Powerup[] {
   if (!settings?.powerups) return [];
   const configured = settings.powerupTypes ?? POWERUP_ORDER;

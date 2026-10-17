@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   answers,
@@ -897,10 +897,10 @@ export async function submitAnswer(
         const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` })
           .from(answers).where(and(
             eq(answers.participantId, participant.id),
-            eq(answers.powerup, input.powerup),
+            isNotNull(answers.powerup),
           ));
         if (count >= powerupUses(settings))
-          throw new HttpError(409, "powerup_used", "No uses of that powerup remain");
+          throw new HttpError(409, "powerup_used", "No powerups left");
         if (input.powerupTargetId) {
           const [target] = await tx.select({ id: participants.id }).from(participants)
             .where(and(
@@ -971,11 +971,39 @@ export async function getResults(code: string, ctx: ResultsContext) {
   const isHost = Boolean(ctx.hostToken && ctx.hostToken === s.hostToken);
   const over = isSessionOver(s);
   const settings = await sessionSettings(s);
-  const showAnswers = isHost || canRevealAnswers(settings, over);
-  const showBoard =
-    isHost ||
-    ((over || (s.mode === "live" && s.revealed)) &&
-      canShowLeaderboard(settings, over));
+  const quiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, s.quizId),
+    with: {
+      questions: {
+        orderBy: asc(questions.position),
+        with: { options: { orderBy: asc(options.position) } },
+      },
+    },
+  });
+  let participantFinished = false;
+  if (s.mode === "scheduled" && !over && ctx.clientToken) {
+    const player = await getParticipant(s.id, ctx.clientToken);
+    if (player && quiz?.questions.length) {
+      const [playerAnswers, views] = await Promise.all([
+        db.select({ questionId: answers.questionId }).from(answers)
+          .where(eq(answers.participantId, player.id)),
+        db.select({ questionId: questionViews.questionId, startedAt: questionViews.startedAt })
+          .from(questionViews).where(eq(questionViews.participantId, player.id)),
+      ]);
+      const completed = new Set(playerAnswers.map((answer) => answer.questionId));
+      for (const view of views) {
+        const question = quiz.questions.find((item) => item.id === view.questionId);
+        if (question && Date.now() >= view.startedAt.getTime() + question.timeLimitSec * 1000)
+          completed.add(view.questionId);
+      }
+      participantFinished = quiz.questions.every((question) => completed.has(question.id));
+    }
+  }
+  const playerEnd = over || participantFinished;
+  const showAnswers = isHost || canRevealAnswers(settings, playerEnd);
+  const showBoard = isHost ||
+    ((playerEnd || (s.mode === "live" && s.revealed)) &&
+      canShowLeaderboard(settings, playerEnd));
 
   const parts = await db
     .select()
@@ -994,16 +1022,6 @@ export async function getResults(code: string, ctx: ResultsContext) {
       }))
     : [];
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: {
-        orderBy: asc(questions.position),
-        with: { options: { orderBy: asc(options.position) } },
-      },
-    },
-  });
-
   const allAnswers = await db
     .select()
     .from(answers)
@@ -1016,7 +1034,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
     byQuestion.set(a.questionId, list);
   }
 
-  const questionStats = (!isHost && !over ? [] : (quiz?.questions ?? [])).map(
+  const questionStats = (!isHost && !playerEnd ? [] : (quiz?.questions ?? [])).map(
     (q) => {
       const list = byQuestion.get(q.id) ?? [];
       const meta = QUESTION_TYPES[q.type];
@@ -1048,6 +1066,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
       return {
         questionId: q.id,
         prompt: q.prompt,
+        mediaUrl: q.mediaUrl,
         type: q.type,
         responses: list.length,
         options: optionTallies,

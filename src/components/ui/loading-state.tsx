@@ -1,7 +1,7 @@
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
 
 export function LoadingState({
-  label = "Gathering the good questions…",
+  label = "Loading…",
 }: {
   label?: string;
 }) {

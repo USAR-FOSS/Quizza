@@ -98,6 +98,7 @@ export type LeaderboardEntry = {
 export type QuestionStats = {
   questionId: string;
   prompt: string;
+  mediaUrl: string | null;
   type: QuestionType;
   responses: number;
   options: {
@@ -227,9 +228,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getResults: (code: string, hostToken?: string) =>
+  getResults: (code: string, hostToken?: string, clientToken?: string) =>
     request<Results>(`/sessions/${code}/results`, {
-      headers: hostToken ? { authorization: `Bearer ${hostToken}` } : {},
+      headers: {
+        ...(hostToken ? { authorization: `Bearer ${hostToken}` } : {}),
+        ...(clientToken ? { "x-client-token": clientToken } : {}),
+      },
     }),
 
   control: (

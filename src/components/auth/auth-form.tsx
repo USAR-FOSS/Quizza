@@ -66,11 +66,9 @@ export function AuthForm({
       <div className="mb-6 flex items-center gap-3">
         <QuizBuddy className="w-20 shrink-0" />
         <div>
-          <p className="eyebrow text-grape">Make yourself at home</p>
+          <p className="eyebrow text-grape">Host account</p>
           <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight">
-            {mode === "signin"
-              ? "Hey, curious human."
-              : "Your people. Your quizzes."}
+            {mode === "signin" ? "Sign in" : "Create account"}
           </h1>
         </div>
       </div>

@@ -92,13 +92,13 @@ export function QuizSettingsPanel({
         />
         {settings.powerups && (
           <div className="mt-3 space-y-3 rounded-2xl border border-ink/15 bg-white/60 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Uses of each powerup per player</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Total powerups per player</p>
             <div className="flex gap-2">
               {([1, 2, 3] as const).map((count) => (
                 <button key={count} type="button" aria-pressed={powerupUses(settings) === count}
                   onClick={() => onChange({ powerupUses: count })}
                   className={cn("min-h-11 flex-1 rounded-xl border-2 font-display font-bold transition-colors", powerupUses(settings) === count ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}
-                >{count} {count === 1 ? "use" : "uses"}</button>
+                >{count} {count === 1 ? "powerup" : "powerups"}</button>
               ))}
             </div>
             <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Available powerups</p>

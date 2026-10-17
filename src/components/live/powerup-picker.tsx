@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { LifeBuoy, Shield, Swords, Zap } from "lucide-react";
 import { api } from "@/lib/api-client";
-import { POWERUP_INFO, POWERUP_ORDER, type Powerup } from "@/lib/powerups";
+import { POWERUP_INFO, POWERUP_ORDER, powerupsLeft, type Powerup } from "@/lib/powerups";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,7 @@ export function PowerupIntro({ types, uses }: { types: Powerup[]; uses: number }
   if (!types.length) return null;
   return (
     <div className="mt-5 rounded-2xl border-2 border-ink/15 bg-sun/10 p-4 text-left">
-      <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Your game kit · {uses} {uses === 1 ? "use" : "uses"} of each</p>
+      <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Powerups · choose {uses} {uses === 1 ? "time" : "times"} total</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {POWERUP_ORDER.filter((item) => types.includes(item)).map((item) => {
           const Icon = icons[item];
@@ -23,7 +23,7 @@ export function PowerupIntro({ types, uses }: { types: Powerup[]; uses: number }
           </div>;
         })}
       </div>
-      <p className="mt-3 text-xs text-ink-soft">Choose at most one for a scored question. You can always save it for later.</p>
+      <p className="mt-3 text-xs text-ink-soft">One per question. Save them for any scored round.</p>
     </div>
   );
 }
@@ -57,19 +57,19 @@ export function PowerupPicker({
     return () => { alive = false; clearTimeout(timer); };
   }, [selected, code, clientToken, search]);
 
-  if (!available.length) return null;
+  if (!available.length || powerupsLeft(uses, used) === 0) return null;
   return (
     <fieldset disabled={disabled} className="mt-5 rounded-2xl border border-ink/15 bg-white/60 p-3 disabled:opacity-50">
-      <legend className="px-1 text-xs font-bold uppercase tracking-wider text-ink-soft">Powerup for this question · optional</legend>
+      <legend className="px-1 text-xs font-bold uppercase tracking-wider text-ink-soft">Powerup · {powerupsLeft(uses, used)} left</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {POWERUP_ORDER.filter((item) => available.includes(item)).map((item) => {
           const Icon = icons[item];
-          const left = Math.max(0, uses - used.filter((value) => value === item).length);
+          const left = powerupsLeft(uses, used);
           return <button key={item} type="button" disabled={left === 0}
             aria-pressed={selected === item}
             onClick={() => { onChange(selected === item ? undefined : item); onTargetChange?.(undefined); }}
             className={cn("flex min-h-12 items-center gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm font-bold transition-colors disabled:opacity-40", selected === item ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}
-          ><Icon className="size-4 shrink-0" /><span className="flex-1">{POWERUP_INFO[item].name}</span><span className="text-xs tabular-nums text-ink-soft">{left} left</span></button>;
+          ><Icon className="size-4 shrink-0" /><span className="flex-1">{POWERUP_INFO[item].name}</span></button>;
         })}
       </div>
       {selected && <p role="status" className="mt-3 text-xs text-ink-soft">{POWERUP_INFO[selected].description}</p>}

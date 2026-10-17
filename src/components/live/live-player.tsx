@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { QuestionMedia } from "@/components/ui/question-media";
 import { PowerupIntro, PowerupPicker } from "@/components/live/powerup-picker";
 import { AnswerReview } from "@/components/live/answer-review";
-import type { Powerup } from "@/lib/powerups";
+import { powerupsLeft, type Powerup } from "@/lib/powerups";
 import { LoadingState } from "@/components/ui/loading-state";
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
 import { WordCloud } from "@/components/ui/word-cloud";
@@ -113,7 +113,7 @@ export function LivePlayer({ code }: { code: string }) {
   if (!session) {
     return (
       <Screen>
-        <LoadingState label="Finding your people…" />
+        <LoadingState label="Loading room…" />
       </Screen>
     );
   }
@@ -250,7 +250,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
           <p role="status" className="mt-4 text-sm text-ink-soft">
             {connection === "reconnecting"
               ? "Reconnecting… Check your connection or rejoin the room."
-              : "Finding your people…"}
+              : "Loading room…"}
           </p>
         </div>
       </Screen>
@@ -309,15 +309,12 @@ function Connected({ code, me }: { code: string; me: Identity }) {
           {snap.phase === "lobby" && (
             <Panel
               key="lobby"
-              title="You’ve found your people."
-              body={`${snap.participantCount} in the room. The host will start your first round.`}
+              title="Waiting for host"
+              body={`${snap.participantCount} in the room.`}
             >
               <QuizCover quiz={snap.quiz} />
               <PowerupIntro types={snap.quiz.powerupTypes ?? []} uses={snap.quiz.powerupUses ?? 1} />
               <LobbyCrowd players={snap.leaderboard} meId={me.participantId} />
-              <p className="mt-4 text-xs text-ink-soft">
-                Choose → lock in → reveal together. Keep this tab open.
-              </p>
             </Panel>
           )}
 
@@ -391,8 +388,7 @@ function QuestionLive({
   const [targetId, setTargetId] = useState<string>();
   const [choiceError, setChoiceError] = useState("");
   const uses = snap.quiz.powerupUses ?? 1;
-  const availablePowerup = powerup &&
-    usedPowerups.filter((used) => used === powerup).length < uses ? powerup : undefined;
+  const availablePowerup = powerup && powerupsLeft(uses, usedPowerups) > 0 ? powerup : undefined;
   const lock = (payload: {
     optionId?: string;
     textValue?: string;
@@ -632,14 +628,7 @@ function RevealLive({
             )}
           </div>
           <h2 className="mt-3 font-display text-2xl font-extrabold text-ink">
-            {result.isCorrect
-              ? `${["Right on.", "You had that one.", "Nicely spotted.", "That’s the one!"][q.index % 4]} +${result.pointsAwarded}`
-              : [
-                  "A plot twist. Next round?",
-                  "One to remember.",
-                  "Close the gap next round.",
-                  "Now you know.",
-                ][q.index % 4]}
+            {result.isCorrect ? `Correct · +${result.pointsAwarded}` : "Incorrect"}
           </h2>
         </div>
       )}
@@ -653,6 +642,7 @@ function RevealLive({
       ) : null}
 
       <h1 className="font-display text-xl font-bold text-ink">{q.prompt}</h1>
+      <QuestionMedia url={q.mediaUrl} />
       {q.type === "word_cloud" && (
         <WordCloud values={snap.reveal?.textValues ?? []} />
       )}

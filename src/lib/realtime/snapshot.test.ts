@@ -54,7 +54,7 @@ const quiz = {
       prompt: "Ready?",
       timeLimitSec: 5,
       settings: {},
-      mediaUrl: null,
+      mediaUrl: "/api/v1/uploads/11111111-1111-4111-8111-111111111111",
       options: [{ id: "yes", label: "Yes", isCorrect: true, color: "mint" }],
     },
   ],
@@ -107,6 +107,7 @@ describe("shared live reveal", () => {
     expect(snap.player.phase).toBe("question");
     expect(snap.player.reveal).toBeNull();
     expect(snap.player.leaderboard).toEqual([]);
+    expect(snap.player.question?.mediaUrl).toBe("/api/v1/uploads/11111111-1111-4111-8111-111111111111");
     expect(snap.host.correctOptionId).toBe("yes");
     expect(mock.publish).not.toHaveBeenCalled();
   });

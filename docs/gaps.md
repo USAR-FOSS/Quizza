@@ -21,11 +21,14 @@ smoke checks; production scale has not been load-tested.
   are rejected. Client elapsed time cannot substitute for the server clock.
 - Answer insertion and participant score changes share a transaction. Unique
   constraints prevent duplicate answers; locked per-player checks enforce the
-  host's one-to-three powerup charges. Scale bounds and
+  host's one-to-three shared powerup charges. Scale bounds and
   configured word-cloud entry counts are validated on the server.
 - Optional Double up, Safety net, Shield, and Attack powerups, with one to three
-  charges of each per player. Shield and Attack are live-only; attack transfers
+  total charges per player. Shield and Attack are live-only; attack transfers
   settle atomically at the shared reveal. Players see their game kit before play.
+- Scheduled players can see policy-permitted answers and standings after their
+  own attempt finishes, even while the room remains open. Uploaded question
+  media remains visible on live reveal and in the final answer review.
 - HTTPS question media (images, direct video and audio), with controls, loading
   failures, and no server-side URL fetching. Quiz images, covers, custom icons,
   and player photos can also be uploaded, resized, and stored in Postgres.

@@ -73,7 +73,7 @@ export function QuizLibrary({ quizzes }: { quizzes: Quiz[] }) {
               aria-label="Search quizzes"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a good question…"
+              placeholder="Search quizzes…"
               className="w-full min-w-0 bg-transparent text-sm outline-none"
             />
           </label>
@@ -98,7 +98,7 @@ export function QuizLibrary({ quizzes }: { quizzes: Quiz[] }) {
           <QuizBuddy className="mx-auto w-32" />
           <h3 className="mt-3 font-display text-xl font-bold">
             {quizzes.length
-              ? "No matches. Try another little keyword?"
+              ? "No matching quizzes."
               : "Your next great quiz starts here."}
           </h3>
           <p className="mt-2 text-sm text-ink-soft">

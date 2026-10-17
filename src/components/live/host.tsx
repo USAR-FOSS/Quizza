@@ -216,6 +216,7 @@ export function Host({ code }: { code: string }) {
               <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
                 {q.prompt}
               </h1>
+              <QuestionMedia url={q.mediaUrl} />
               {q.options.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {q.options.map((o) => {
@@ -354,7 +355,7 @@ function Lobby({
       </p>
       <p className="mt-2 text-sm font-semibold text-ink-soft">
         {snap.participantCount}{" "}
-        {snap.participantCount === 1 ? "player" : "players"} warming up
+        {snap.participantCount === 1 ? "player" : "players"} joined
       </p>
       <LobbyCrowd players={snap.leaderboard} />
 
@@ -364,7 +365,7 @@ function Lobby({
         className="mt-8 inline-flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-grape px-8 font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50"
       >
         <Play className="size-5 fill-current" />
-        Let’s play
+        Start quiz
       </button>
     </motion.div>
   );

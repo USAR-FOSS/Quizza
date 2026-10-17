@@ -135,7 +135,7 @@ export function QuestionSidebar({
               onClose={() => setMenuOpen(false)}
             >
               <p className="mb-4 text-sm text-ink-soft">
-                Test a hunch, take a vote, or get the whole room talking.
+                Add a question to begin.
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {QUESTION_TYPE_ORDER.map((type) => {

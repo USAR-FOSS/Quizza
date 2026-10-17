@@ -24,12 +24,11 @@ import { cn } from "@/lib/utils";
 import { QuestionMedia } from "@/components/ui/question-media";
 import { PowerupIntro, PowerupPicker } from "@/components/live/powerup-picker";
 import { AnswerReview } from "@/components/live/answer-review";
-import type { Powerup } from "@/lib/powerups";
+import { powerupsLeft, type Powerup } from "@/lib/powerups";
 import { LoadingState } from "@/components/ui/loading-state";
 import { AvatarChoice } from "@/components/ui/avatar-choice";
 import { uploadImage } from "@/lib/upload-client";
 import { QuizCover, RoomTheme } from "./room-theme";
-import { QuizBuddy } from "@/components/ui/quiz-buddy";
 
 type Identity = {
   clientToken: string;
@@ -91,7 +90,10 @@ export function Player({ code }: { code: string }) {
         const identity: Identity | null = stored ? JSON.parse(stored) : null;
         if (identity) {
           setMe(identity);
-          await loadQuestions(identity.clientToken);
+          if (s.status === "ended") {
+            setResults(await api.getResults(code, undefined, identity.clientToken).catch(() => null));
+            setPhase("done");
+          } else await loadQuestions(identity.clientToken);
         } else {
           setPhase("join");
         }
@@ -126,7 +128,7 @@ export function Player({ code }: { code: string }) {
           setIndex(qs.length);
           setPhase("done");
           try {
-            setResults(await api.getResults(code));
+            setResults(await api.getResults(code, undefined, clientToken));
           } catch {
             setResults(null);
           }
@@ -136,7 +138,8 @@ export function Player({ code }: { code: string }) {
         }
       } catch (err) {
         if (err instanceof ApiClientError && err.code === "session_not_open") {
-          setPhase("closed");
+          setResults(await api.getResults(code, undefined, clientToken).catch(() => null));
+          setPhase("done");
         } else if (
           err instanceof ApiClientError &&
           err.code === "not_scheduled"
@@ -252,7 +255,7 @@ export function Player({ code }: { code: string }) {
     } else {
       setPhase("done");
       try {
-        setResults(await api.getResults(code));
+        setResults(await api.getResults(code, undefined, me?.clientToken));
       } catch {
         setResults(null);
       }
@@ -278,7 +281,7 @@ export function Player({ code }: { code: string }) {
         <AnimatePresence mode="wait">
           {phase === "loading" && (
             <Centered key="l">
-              <LoadingState label="Finding your next good question…" />
+              <LoadingState label="Loading question…" />
             </Centered>
           )}
 
@@ -380,12 +383,11 @@ export function Player({ code }: { code: string }) {
               result={lastResult}
               note={note}
               last={index + 1 >= questions.length}
-              index={index}
               onNext={advance}
             />
           )}
 
-          {phase === "done" && <Done key="done" results={results} me={me} onRefresh={() => api.getResults(code).then(setResults)} />}
+          {phase === "done" && <Done key="done" results={results} me={me} onRefresh={() => api.getResults(code, undefined, me?.clientToken).then(setResults)} />}
         </AnimatePresence>
       </main>
     </RoomTheme>
@@ -514,10 +516,10 @@ function JoinCard({
         Scheduled · play at your pace
       </p>
       <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
-        Your next little challenge.
+        Join quiz
       </h1>
       <p className="mt-2 text-sm text-ink-soft">
-        No waiting room here. Choose a name, then start when you’re ready.
+        Enter a name to start.
       </p>
       <div className="mt-4 flex items-center gap-3">
         <input
@@ -593,8 +595,7 @@ function Intro({
         {title}
       </h1>
       <p className="mt-2 text-ink-soft">
-        {count} {count === 1 ? "question" : "questions"}. Answer fast and
-        accurately.
+        {count} {count === 1 ? "question" : "questions"}.
       </p>
       <PowerupIntro types={powerupTypes} uses={powerupUses} />
       <button
@@ -671,7 +672,7 @@ function QuestionView({
     setBusy(true);
     setError("");
     try {
-      await onSubmit({ ...payload, powerup: powerup && usedPowerups.filter((used) => used === powerup).length < powerupUses ? powerup : undefined });
+      await onSubmit({ ...payload, powerup: powerup && powerupsLeft(powerupUses, usedPowerups) > 0 ? powerup : undefined });
     } catch (err) {
       done.current = false;
       setError(
@@ -806,13 +807,11 @@ function Feedback({
   result,
   note,
   last,
-  index,
   onNext,
 }: {
   result: AnswerResult | null;
   note: string;
   last: boolean;
-  index: number;
   onNext: () => void;
 }) {
   const correct = result?.isCorrect;
@@ -843,40 +842,14 @@ function Feedback({
             )}
           </div>
           <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">
-            {correct
-              ? [
-                  "Right on.",
-                  "Nicely spotted.",
-                  "You know your stuff.",
-                  "That’s the one!",
-                ][index % 4]
-              : [
-                  "One to remember.",
-                  "A little plot twist.",
-                  "Now you know.",
-                  "Keep that curiosity.",
-                ][index % 4]}
+            {correct ? "Correct" : "Incorrect"}
           </h1>
           <p className="mt-1 font-display text-lg font-bold text-grape">
             +{result?.pointsAwarded ?? 0} points
           </p>
         </>
       ) : (
-        <>
-          <QuizBuddy className="mx-auto w-28" mood="happy" />
-          <h1 className="mt-4 font-display text-2xl font-extrabold text-ink">
-            {
-              ["Your take is in.", "Added to the mix.", "Consider it noted."][
-                index % 3
-              ]
-            }
-          </h1>
-          <p className="mt-1 text-ink-soft">
-            {last
-              ? "That’s your last response. Let’s wrap up."
-              : "Ready for the next little challenge?"}
-          </p>
-        </>
+        <h1 className="font-display text-2xl font-extrabold text-ink">Answer saved</h1>
       )}
       <button
         onClick={onNext}
@@ -897,6 +870,7 @@ function Done({
   me: Identity | null;
   onRefresh: () => Promise<void>;
 }) {
+  const [refreshError, setRefreshError] = useState("");
   const mine = results?.leaderboard.find(
     (e) => e.participantId === me?.participantId,
   );
@@ -955,15 +929,19 @@ function Done({
         </div>
       )}
       {results && !results.showBoard && (
-        <p className="mt-5 text-sm text-ink-soft">The host is keeping standings private until the quiz closes, or has chosen to hide them.</p>
+        <p className="mt-5 text-sm text-ink-soft">Leaderboard unavailable.</p>
       )}
       <AnswerReview results={results} />
-      {results && !results.over && (
-        <button type="button" onClick={() => void onRefresh()}
+      {(!results || (!results.over && results.questionStats.length === 0)) && (
+        <button type="button" onClick={() => {
+          setRefreshError("");
+          void onRefresh().catch(() => setRefreshError("Couldn’t load results."));
+        }}
           className="mt-5 min-h-11 rounded-xl border-2 border-ink bg-white px-4 font-display font-bold shadow-pop transition-transform hover:-translate-y-0.5">
           Check for final results
         </button>
       )}
+      {refreshError && <p role="alert" className="mt-2 text-sm text-coral">{refreshError}</p>}
     </motion.div>
   );
 }

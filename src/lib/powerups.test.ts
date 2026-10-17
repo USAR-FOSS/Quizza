@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPowerup, enabledPowerups, planAttackSettlements, type AttackAnswer } from "./powerups";
+import { applyPowerup, enabledPowerups, planAttackSettlements, powerupsLeft, type AttackAnswer } from "./powerups";
 
 describe("powerup scoring", () => {
   it("doubles earned points without awarding points for a wrong answer", () => {
@@ -13,6 +13,10 @@ describe("powerup scoring", () => {
   });
   it("excludes live-only powers from scheduled play", () => {
     expect(enabledPowerups({ powerups: true }, "scheduled")).toEqual(["double", "safety_net"]);
+  });
+  it("uses one shared charge pool across all powers", () => {
+    expect(powerupsLeft(2, ["shield"])).toBe(1);
+    expect(powerupsLeft(2, ["shield", "double"])).toBe(0);
   });
   it("settles attacks in a fixed order, with shields and no negative scores", () => {
     const time = new Date();

@@ -173,6 +173,7 @@ export const OptionTally = z.object({
 export const QuestionStats = z.object({
   questionId: z.string().uuid(),
   prompt: z.string(),
+  mediaUrl: z.string().nullable(),
   type: questionTypeEnum,
   responses: z.number().int(),
   options: z.array(OptionTally),

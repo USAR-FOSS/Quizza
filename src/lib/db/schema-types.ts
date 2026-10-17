@@ -55,7 +55,7 @@ export type QuizSettings = {
   iconImage?: string | null;
   speedBonus?: boolean;
   powerups?: boolean;
-  powerupUses?: number; // charges per enabled powerup, 1–3; default 1
+  powerupUses?: number; // shared charges across all enabled powerups, 1–3; default 1
   powerupTypes?: Powerup[];
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;

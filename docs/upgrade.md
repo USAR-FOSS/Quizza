@@ -15,7 +15,9 @@ database backups; no writable public directory or external storage service is ne
 Migrations 0005 and 0006 add powerup attack targets and outcomes, replace the
 old one-use unique index with a nonunique lookup index, and add the target
 lookup index. Apply them before this release. Existing answers and scores are
-preserved; existing quizzes with powerups enabled default to one charge each.
+preserved; existing quizzes with powerups enabled default to one shared charge.
+The subsequent shared-charge, scheduled-results, and media UI fixes add no
+further database migration.
 
 Set `AUTH_SECRET` in production. The application no longer signs authentication
 or view tokens using a development fallback in production.
@@ -42,8 +44,8 @@ or view tokens using a development fallback in production.
   full points. Live question shuffle uses a shared order for the room.
 - Questions now carry `mediaUrl`, and live questions carry scale settings.
 - `SubmitAnswerBody.powerup` accepts `double`, `safety_net`, `shield`, or
-  `attack` when enabled by the host. The host selects one to three uses of each
-  enabled powerup per player. Double multiplies earned points by two; Safety
+  `attack` when enabled by the host. The host selects one to three powerup uses
+  total per player, shared across all enabled types. Double multiplies earned points by two; Safety
   net earns one third of the question points on a miss. Shield blocks attacks
   for the round. Attack requires `powerupTargetId`, steals the target's earned
   question points if they answered correctly, or up to one third of the
@@ -51,6 +53,10 @@ or view tokens using a development fallback in production.
   the live shared reveal. Shield and Attack are live-only. The player receives
   a powerup introduction before play and decides whether to spend one on each
   scored question.
+- Scheduled players who finish their own attempt can see the leaderboard and
+  answer review immediately when those policies are set to "at end". The host
+  opening their results page does not close the scheduled room. Unfinished
+  players remain gated until they finish or the scheduled window closes.
 - `GET /sessions/{code}/participants?search=...` authenticates with
   `x-client-token` and returns at most 20 other room players to target.
 - CSV downloads require `Authorization: Bearer <host token>`. Query-string host

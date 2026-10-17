@@ -37,19 +37,18 @@ export function QuizAppearance({
         <Palette className="size-5 text-grape" />
         <span className="flex-1">
           <span className="block font-display font-bold">
-            Give this quiz its own look
+            Quiz appearance
           </span>
           <span className="text-xs text-ink-soft">
             Cover art, custom icon & room palette
           </span>
         </span>
-        <span className="text-sm font-bold">Style it →</span>
+        <span className="text-sm font-bold">Edit →</span>
       </button>
       {open && (
-        <Dialog title="A little more you." onClose={() => setOpen(false)}>
+        <Dialog title="Quiz appearance" onClose={() => setOpen(false)}>
           <p className="mb-5 text-sm text-ink-soft">
-            Set the scene before the first question. Your cover welcomes players
-            into the room.
+            Choose a cover, icon, and theme.
           </p>
           <h3 className="mb-2 font-display font-bold">Cover art</h3>
           <ImageUpload
