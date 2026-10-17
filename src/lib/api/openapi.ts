@@ -165,6 +165,23 @@ const routes: RouteDef[] = [
     },
   },
   {
+    method: "post",
+    path: "/api/v1/sessions/{code}/leave",
+    tags: ["Participants"],
+    summary: "Leave a live session roster",
+    description:
+      "Presence update used when a live participant leaves the room. Disconnected players expire from the online roster after a short Redis lease; participant records and scores are retained.",
+    parameters: [
+      { name: "code", in: "path", required: true },
+      { name: "x-client-token", in: "header", required: true },
+    ],
+    responses: {
+      "200": { description: "Presence removed", schema: "Ok" },
+      "401": { description: "Invalid participant", schema: "ApiError" },
+      "404": { description: "Live session not found", schema: "ApiError" },
+    },
+  },
+  {
     method: "get",
     path: "/api/v1/sessions/{code}/questions",
     tags: ["Play"],

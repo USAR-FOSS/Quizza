@@ -357,7 +357,7 @@ function Lobby({
         {snap.participantCount}{" "}
         {snap.participantCount === 1 ? "player" : "players"} joined
       </p>
-      <LobbyCrowd players={snap.leaderboard} />
+      <LobbyCrowd players={snap.onlineParticipants} />
 
       <button
         onClick={onStart}

@@ -16,10 +16,12 @@ export function useEventStream<T>(url: string | null): {
     "connecting" | "connected" | "reconnecting"
   >("connecting");
   const seenEvents = useRef<Set<string>>(new Set());
+  const departedParticipants = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!url) return;
     seenEvents.current.clear();
+    departedParticipants.current.clear();
     const es = new EventSource(url);
     es.onopen = () => setConnection("connected");
     es.onerror = () => setConnection("reconnecting");
@@ -46,7 +48,10 @@ export function useEventStream<T>(url: string | null): {
             }
           }
           const participant = parsed.participantChanged;
+          if (!participant || typeof participant.participantId !== "string") return;
           const joined = parsed.joined === true;
+          if (joined) departedParticipants.current.delete(participant.participantId);
+          else departedParticipants.current.add(participant.participantId);
           setData((prev) => {
             if (
               !prev ||
@@ -56,33 +61,57 @@ export function useEventStream<T>(url: string | null): {
               return prev;
             const current = prev as T & {
               participantCount?: number;
+              phase?: string;
+              onlineParticipants?: Array<{ participantId: string }>;
               leaderboard?: Array<{ participantId: string }>;
             };
-            const roster = current.leaderboard ?? [];
+            const roster = current.onlineParticipants ?? current.leaderboard ?? [];
             const exists = roster.some(
               (entry) => entry.participantId === participant.participantId,
             );
-            const nextRoster =
-              joined || exists
-                ? [
-                    ...roster.filter(
-                      (entry) => entry.participantId !== participant.participantId,
-                    ),
-                    participant,
-                  ]
-                : roster;
+            const nextRoster = joined
+              ? [
+                  ...roster.filter(
+                    (entry) => entry.participantId !== participant.participantId,
+                  ),
+                  participant,
+                ]
+              : roster.filter(
+                  (entry) => entry.participantId !== participant.participantId,
+                );
             return {
               ...current,
-              participantCount:
-                joined && !exists
+              participantCount: current.phase === "lobby"
+                ? joined && !exists
                   ? (current.participantCount ?? 0) + 1
-                  : current.participantCount,
-              leaderboard: nextRoster,
+                  : !joined && exists
+                    ? Math.max(0, (current.participantCount ?? 1) - 1)
+                    : current.participantCount
+                : current.participantCount,
+              onlineParticipants: nextRoster,
+              ...(current.phase === "lobby" ? { leaderboard: nextRoster } : {}),
             } as T;
           });
         } else {
           if (parsed && typeof parsed.serverNow === "number")
             parsed.clockOffsetMs = parsed.serverNow - Date.now();
+          if (parsed && Array.isArray(parsed.onlineParticipants)) {
+            const before = parsed.onlineParticipants as Array<{ participantId: string }>;
+            parsed.onlineParticipants = before.filter(
+              (entry) => !departedParticipants.current.has(entry.participantId),
+            );
+            if (parsed.phase === "lobby" && Array.isArray(parsed.leaderboard)) {
+              const roster = parsed.leaderboard as Array<{ participantId: string }>;
+              const removedCount = roster.filter((entry) =>
+                departedParticipants.current.has(entry.participantId),
+              ).length;
+              parsed.leaderboard = roster.filter(
+                (entry) => !departedParticipants.current.has(entry.participantId),
+              );
+              if (typeof parsed.participantCount === "number")
+                parsed.participantCount = Math.max(0, parsed.participantCount - removedCount);
+            }
+          }
           setData(parsed as T);
         }
       } catch {

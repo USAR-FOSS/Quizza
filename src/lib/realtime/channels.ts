@@ -17,6 +17,10 @@ export function rosterChannel(sessionId: string): string {
   return `${sessionPrefix(sessionId)}:roster`;
 }
 
+export function presenceKey(sessionId: string): string {
+  return `${sessionPrefix(sessionId)}:presence`;
+}
+
 export function answerCounterKey(sessionId: string, questionId: string): string {
   if (!UUID.test(questionId)) throw new Error("Invalid realtime question id");
   return `${sessionPrefix(sessionId)}:question:${questionId}:answers`;

@@ -9,6 +9,7 @@ import {
   sessions,
 } from "@/lib/db/schema";
 import { publish } from "./bus";
+import { onlineParticipantIds } from "./presence";
 import { usesRedisRealtime } from "@/lib/redis/client";
 import { canRevealAnswers, canShowLeaderboard } from "@/lib/quiz-policy";
 import { seededShuffle } from "@/lib/shuffle";
@@ -63,6 +64,7 @@ export async function buildSnapshots(
       phase: "ended",
       quiz: { title: "", theme: "grape" },
       participantCount: 0,
+      onlineParticipants: [],
       question: null,
       reveal: null,
       leaderboard: [],
@@ -128,11 +130,24 @@ export async function buildSnapshots(
     score: p.score,
     rank: i + 1,
   }));
-
   let phase: LivePhase;
   if (s.status === "ended") phase = "ended";
   else if (s.status === "lobby" || !s.currentQuestionId) phase = "lobby";
   else phase = s.revealed ? "reveal" : "question";
+
+  const onlineIds = phase === "lobby" && s.mode === "live"
+    ? await onlineParticipantIds(sessionId)
+    : null;
+  const onlineParticipants = phase === "lobby"
+    ? parts
+        .filter((p) => !onlineIds || onlineIds.has(p.id))
+        .map((p) => ({
+          participantId: p.id,
+          nickname: p.nickname,
+          avatarColor: p.avatarColor,
+          avatarUrl: p.avatarUrl,
+        }))
+    : [];
 
   const current = s.currentQuestionId
     ? (qs.find((q) => q.id === s.currentQuestionId) ?? null)
@@ -222,7 +237,8 @@ export async function buildSnapshots(
       iconImage: settings.iconImage,
       coverIcon: quiz?.coverIcon,
     },
-    participantCount: parts.length,
+    participantCount: phase === "lobby" ? onlineParticipants.length : parts.length,
+    onlineParticipants,
     question,
     reveal:
       phase === "reveal"

@@ -4,6 +4,10 @@
 
 - Redis has one subscriber connection per warm app instance, not per browser.
 - SSE streams send heartbeats and reconnect before the platform duration limit.
+- Live lobby avatars use Redis presence leases (65-second expiry); brief
+  reconnects are tolerated and dead connections eventually leave the roster.
+- Presence refreshes share each 25-second SSE heartbeat; 1,000 connected players
+  add about 40 Redis script calls/second, plus occasional roster cleanup events.
 - QStash reveal callbacks complete close to the question deadline.
 - Postgres connections stay below the provider pool limit.
 - No `realtime.redis_fallback` or sustained reconnect errors appear in logs.

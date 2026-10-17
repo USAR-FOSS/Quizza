@@ -109,7 +109,7 @@ export const POST = handle(async (req: NextRequest) => {
           eq(participants.sessionId, sessionId),
         ),
       );
-    scheduleRoster(sessionId, participantId, false);
+    scheduleRoster(sessionId, participantId, true);
   }
   return json({ url }, 201);
 });

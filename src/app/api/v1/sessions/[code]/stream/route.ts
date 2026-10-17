@@ -2,7 +2,9 @@ import type { NextRequest } from "next/server";
 import { buildSnapshots } from "@/lib/realtime/snapshot";
 import { subscribe } from "@/lib/realtime/bus";
 import { resolveSession, getParticipantByToken } from "@/lib/sessions";
-import { onRedisSubscriberReconnect } from "@/lib/redis/client";
+import { onRedisSubscriberReconnect, usesRedisRealtime } from "@/lib/redis/client";
+import { scheduleRoster, scheduleRosterBatch } from "@/lib/realtime/notifications";
+import { refreshPresence } from "@/lib/realtime/presence";
 
 type Ctx = { params: Promise<{ code: string }> };
 
@@ -18,16 +20,22 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const session = await resolveSession(code);
   if (!session) return new Response("Session not found", { status: 404 });
 
+  const participant = playerToken
+    ? await getParticipantByToken(session.id, playerToken)
+    : null;
   let role: "host" | "player";
   if (hostToken && hostToken === session.hostToken) {
     role = "host";
-  } else if (
-    playerToken &&
-    (await getParticipantByToken(session.id, playerToken))
-  ) {
+  } else if (participant) {
     role = "player";
   } else {
     return new Response("Unauthorized", { status: 401 });
+  }
+  if (role === "player" && session.mode === "live" && participant) {
+    const presence = await refreshPresence(session.id, participant.id);
+    scheduleRosterBatch(session.id, presence.expired, false);
+    if (presence.joined || !usesRedisRealtime())
+      scheduleRoster(session.id, participant.id, true);
   }
 
   const encoder = new TextEncoder();
@@ -127,7 +135,24 @@ export async function GET(req: NextRequest, { params }: Ctx) {
         return;
       }
 
+      let presenceUpdateRunning = false;
       heartbeat = setInterval(() => {
+        if (usesRedisRealtime() && session.mode === "live" && !presenceUpdateRunning) {
+          presenceUpdateRunning = true;
+          void refreshPresence(
+            session.id,
+            role === "player" && session.mode === "live" ? participant?.id : undefined,
+          )
+            .then((presence) => {
+              scheduleRosterBatch(session.id, presence.expired, false);
+              if (presence.joined && participant)
+                scheduleRoster(session.id, participant.id, true);
+            })
+            .catch((error) => console.error("[realtime] presence heartbeat failed", error))
+            .finally(() => {
+              presenceUpdateRunning = false;
+            });
+        }
         try {
           controller.enqueue(encoder.encode(`: ping\n\n`));
         } catch {

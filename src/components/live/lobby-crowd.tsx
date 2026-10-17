@@ -2,7 +2,7 @@
 import { motion } from "motion/react";
 import { Avatar } from "@/components/ui/avatar";
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
-import type { LiveLeaderboardEntry } from "@/lib/realtime/events";
+import type { PlayerSnapshot } from "@/lib/realtime/events";
 
 function seed(id: string) {
   return [...id].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -12,7 +12,7 @@ export function LobbyCrowd({
   players,
   meId,
 }: {
-  players: LiveLeaderboardEntry[];
+  players: PlayerSnapshot["onlineParticipants"];
   meId?: string;
 }) {
   return (
