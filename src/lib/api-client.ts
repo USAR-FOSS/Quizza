@@ -27,6 +27,8 @@ export type SessionPublic = {
   participantCount: number;
   participation: ParticipationMode;
   powerups: boolean;
+  powerupUses: number;
+  powerupTypes: Powerup[];
   quiz: {
     title: string;
     coverIcon: string;
@@ -79,6 +81,9 @@ export type AnswerResult = {
   isCorrect: boolean | null;
   pointsAwarded: number | null;
   correctOptionId: string | null;
+  attackStolen?: number;
+  attackBlocked?: boolean;
+  attackedLoss?: number;
 };
 
 export type LeaderboardEntry = {
@@ -168,6 +173,11 @@ export const api = {
     }),
 
   getSession: (code: string) => request<SessionPublic>(`/sessions/${code}`),
+  searchTargets: (code: string, clientToken: string, search: string) =>
+    request<Array<{ id: string; nickname: string; avatarColor: string; avatarUrl: string | null }>>(
+      `/sessions/${code}/participants?search=${encodeURIComponent(search)}`,
+      { headers: { "x-client-token": clientToken } },
+    ),
   getProgress: (code: string, clientToken: string) =>
     request<{
       answered: string[];
@@ -209,6 +219,7 @@ export const api = {
       elapsedMs?: number;
       viewToken?: string;
       powerup?: Powerup;
+      powerupTargetId?: string;
     },
   ) =>
     request<AnswerResult>(`/sessions/${code}/answers`, {

@@ -67,7 +67,7 @@ export const REVEAL_OPTIONS: {
   {
     value: "at_end",
     label: "At the end",
-    blurb: "Correct answers are withheld until the quiz finishes.",
+    blurb: "Live: after the host ends the game. Scheduled: after the closing time.",
   },
   {
     value: "never",
@@ -83,13 +83,13 @@ export const LEADERBOARD_OPTIONS: {
 }[] = [
   {
     value: "per_question",
-    label: "After each question",
-    blurb: "Standings update as the quiz goes.",
+    label: "After each live round",
+    blurb: "Live players see standings at each shared reveal. Scheduled players see them after closing.",
   },
   {
     value: "at_end",
     label: "At the end",
-    blurb: "The leaderboard appears when the quiz finishes.",
+    blurb: "Players see standings only when the host ends or the schedule closes.",
   },
   {
     value: "never",

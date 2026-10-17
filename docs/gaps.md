@@ -20,10 +20,12 @@ smoke checks; production scale has not been load-tested.
   requests. Missing/invalid view tokens and expired/revealed question submissions
   are rejected. Client elapsed time cannot substitute for the server clock.
 - Answer insertion and participant score changes share a transaction. Unique
-  constraints prevent duplicate answers and reused powerups. Scale bounds and
+  constraints prevent duplicate answers; locked per-player checks enforce the
+  host's one-to-three powerup charges. Scale bounds and
   configured word-cloud entry counts are validated on the server.
-- Optional double-points and shield powerups, once each per participant per run.
-  They are off by default and work in live and scheduled play.
+- Optional Double up, Safety net, Shield, and Attack powerups, with one to three
+  charges of each per player. Shield and Attack are live-only; attack transfers
+  settle atomically at the shared reveal. Players see their game kit before play.
 - HTTPS question media (images, direct video and audio), with controls, loading
   failures, and no server-side URL fetching. Quiz images, covers, custom icons,
   and player photos can also be uploaded, resized, and stored in Postgres.
@@ -61,7 +63,7 @@ smoke checks; production scale has not been load-tested.
 - Question duplication and option reordering.
 - QR join codes, pause/extend a live question, participant cap/kick controls.
 - Participant-specific answer review and richer host drill-down/analytics.
-- Additional powerups such as hints or attacks; music, uploaded audio/video,
+- Additional powerups such as hints; music, uploaded audio/video,
   image cropping, and standalone cleanup of replaced uploads.
 - Admin tooling, OIDC roles/member restrictions, audit logs, account recovery.
 - A session snapshot of the quiz template for long-term immutable historical

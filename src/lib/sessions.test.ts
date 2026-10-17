@@ -15,7 +15,7 @@ vi.mock("@/lib/db", () => {
       questions: { findFirst: mocks.question },
       quizzes: { findFirst: mocks.quiz },
     },
-    select: () => {
+    select: (selection?: Record<string, unknown>) => {
       let name: string;
       const chain = {
         from: (table: Parameters<typeof getTableName>[0]) => {
@@ -27,7 +27,7 @@ vi.mock("@/lib/db", () => {
         limit: () => chain,
         for: () => chain,
         then: (resolve: (rows: unknown[]) => void) =>
-          Promise.resolve(mocks.rows[name] ?? []).then(resolve),
+          Promise.resolve(selection?.count ? [{ count: 0 }] : (mocks.rows[name] ?? [])).then(resolve),
       };
       return chain;
     },

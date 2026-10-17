@@ -116,7 +116,7 @@ realtime under `src/lib`.
 - [x] Scheduled mode, end to end: host launch (`/present/[quizId]`), anonymous player (`/play/[code]`) with timing and accuracy, and results (`/results/[code]`)
 - [x] Live mode: presenter (`/host/[code]`) and player over SSE, room code, live reveal and leaderboard
 - [x] Host sign-in (email/password + FOSSClub OIDC flow), quiz ownership, my-quizzes dashboard (`/dashboard`)
-- [x] Optional double-points and shield powerups, direct HTTPS image/video/audio questions
+- [x] Configurable Double up, Safety net, Shield, and Attack powerups; direct HTTPS image/video/audio questions
 - [x] Shared server-timed live reveals, explicit player lock-in, private pre-reveal results
 - [x] Image/cover/icon/player-photo uploads, avatar-bubble lobbies, six room palettes
 - [x] 100-point defaults, quiz-wide speed scoring, viewport-safe question picker
@@ -131,7 +131,8 @@ realtime under `src/lib`.
 - [ ] Load testing and measured capacity at the PRD's full concurrency target
 
 After updating an existing installation, run `pnpm db:migrate` before starting
-the app. Migration 0003 adds durable question views and per-run powerup tracking.
+the app. Migrations 0003–0006 cover durable question views, image uploads,
+and the repeatable powerup/attack model.
 See [upgrade notes](docs/upgrade.md) for API and behavior changes.
 
 ## License

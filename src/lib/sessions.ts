@@ -17,6 +17,7 @@ import {
 } from "@/lib/realtime/notifications";
 import { publishState } from "@/lib/realtime/snapshot";
 import { scheduleReveal } from "@/lib/realtime/scheduler";
+import { settleDueQuestion } from "@/lib/realtime/settlement";
 import { generateJoinCode, generateToken } from "@/lib/codes";
 import { QUESTION_TYPES, OPTION_COLORS } from "@/lib/quiz-constants";
 import { clampResponseMs, computePoints } from "@/lib/scoring";
@@ -30,7 +31,7 @@ import { seededShuffle } from "@/lib/shuffle";
 import { signViewToken, verifyViewToken } from "@/lib/view-token";
 import { isClean } from "@/lib/moderation";
 import { csvField } from "@/lib/csv";
-import { applyPowerup } from "@/lib/powerups";
+import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
 import type { z } from "zod";
 import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
@@ -198,6 +199,16 @@ export async function getProgress(code: string, token: string | null) {
       ),
     );
   const settings = await sessionSettings(s);
+  const incoming = await db.select({
+    questionId: answers.questionId,
+    attackStolen: answers.attackStolen,
+  }).from(answers).where(and(
+    eq(answers.sessionId, s.id),
+    eq(answers.powerupTargetId, participant.id),
+  ));
+  const lossByQuestion = new Map<string, number>();
+  for (const attack of incoming)
+    lossByQuestion.set(attack.questionId, (lossByQuestion.get(attack.questionId) ?? 0) + attack.attackStolen);
   const visible = canRevealAnswers(settings, s.status === "ended");
   const results: Record<
     string,
@@ -207,6 +218,9 @@ export async function getProgress(code: string, token: string | null) {
       isCorrect: boolean | null;
       pointsAwarded: number | null;
       correctOptionId: string | null;
+      attackStolen: number;
+      attackBlocked: boolean;
+      attackedLoss: number;
     }
   > = {};
   for (const a of rows) {
@@ -222,6 +236,9 @@ export async function getProgress(code: string, token: string | null) {
       isCorrect: visible ? a.isCorrect : null,
       pointsAwarded: visible ? a.points : null,
       correctOptionId: null,
+      attackStolen: a.attackStolen,
+      attackBlocked: a.attackBlocked,
+      attackedLoss: lossByQuestion.get(a.questionId) ?? 0,
     };
   }
   return {
@@ -389,6 +406,8 @@ export async function getPublicSession(code: string) {
     participantCount: count,
     participation: participationMode((quiz?.settings as QuizSettings) ?? {}),
     powerups: Boolean(quiz?.settings.powerups),
+    powerupUses: powerupUses(quiz?.settings),
+    powerupTypes: enabledPowerups(quiz?.settings, s.mode),
     quiz: {
       title: quiz?.title ?? "",
       coverIcon: quiz?.coverIcon ?? "shapes",
@@ -719,12 +738,18 @@ export async function submitAnswer(
 
   const meta = QUESTION_TYPES[q.type];
   const settings = await sessionSettings(s);
-  if (input.powerup && (!settings.powerups || !meta.scorable)) {
+  if (input.powerup && (!meta.scorable || !enabledPowerups(settings, s.mode).includes(input.powerup))) {
     throw new HttpError(
       422,
       "powerup_unavailable",
       "Powerups are not enabled for this question",
     );
+  }
+  if ((input.powerup === "attack") !== Boolean(input.powerupTargetId)) {
+    throw new HttpError(422, "attack_target_required", "Choose one player to attack");
+  }
+  if (input.powerupTargetId === participant.id) {
+    throw new HttpError(422, "invalid_attack_target", "Choose another player");
   }
   let optionId: string | null = null;
   let textValue: string | null = null;
@@ -864,6 +889,28 @@ export async function submitAnswer(
           );
         }
       }
+      if (input.powerup) {
+        // Serialize answers by this player across questions so charges cannot
+        // be overspent by concurrent requests on different app instances.
+        await tx.select({ id: participants.id }).from(participants)
+          .where(eq(participants.id, participant.id)).for("update");
+        const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` })
+          .from(answers).where(and(
+            eq(answers.participantId, participant.id),
+            eq(answers.powerup, input.powerup),
+          ));
+        if (count >= powerupUses(settings))
+          throw new HttpError(409, "powerup_used", "No uses of that powerup remain");
+        if (input.powerupTargetId) {
+          const [target] = await tx.select({ id: participants.id }).from(participants)
+            .where(and(
+              eq(participants.id, input.powerupTargetId),
+              eq(participants.sessionId, s.id),
+            ));
+          if (!target)
+            throw new HttpError(422, "invalid_attack_target", "That player is not in this room");
+        }
+      }
       await tx.insert(answers).values({
         sessionId: s.id,
         questionId: q.id,
@@ -875,6 +922,7 @@ export async function submitAnswer(
         responseMs,
         points,
         powerup: input.powerup,
+        powerupTargetId: input.powerupTargetId,
       });
       if (points > 0)
         await tx
@@ -884,20 +932,6 @@ export async function submitAnswer(
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      if (input.powerup) {
-        const used = await db.query.answers.findFirst({
-          where: and(
-            eq(answers.participantId, participant.id),
-            eq(answers.powerup, input.powerup),
-          ),
-        });
-        if (used && used.questionId !== q.id)
-          throw new HttpError(
-            409,
-            "powerup_used",
-            "That powerup has already been used",
-          );
-      }
       throw new HttpError(
         409,
         "already_answered",
@@ -1150,6 +1184,19 @@ export async function controlSession(
         "Everyone gets the full timer. Answers reveal together when it ends.",
       );
   }
+  if (action === "reveal") {
+    if (!s.currentQuestionId || !s.questionStartedAt)
+      throw new HttpError(409, "not_started", "Start the session first");
+    const result = await settleDueQuestion({
+      sessionId: s.id,
+      questionId: s.currentQuestionId,
+      questionStartedAt: s.questionStartedAt.toISOString(),
+    });
+    if (result.status === "early")
+      throw new HttpError(409, "round_running", "Everyone gets the full timer.");
+    if (result.status === "revealed") await publishState(s.id);
+    return { ok: true as const };
+  }
 
   let qrows = await db
     .select({ id: questions.id })
@@ -1190,8 +1237,6 @@ export async function controlSession(
       questionStartedAt: startedAt,
       revealed: false,
     };
-  } else if (action === "reveal") {
-    patch = { revealed: true };
   } else if (action === "next") {
     const nextIdx = curIdx + 1;
     if (nextIdx >= total) {

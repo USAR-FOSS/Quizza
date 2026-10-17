@@ -42,12 +42,21 @@ short-lived preview hostname for a long-running event.
 1. Deploy the code to Preview.
 2. Apply database migrations separately with `pnpm db:migrate` against the
    Preview database. Before Production promotion, apply them to Production too.
-   This realtime release has no new database migration.
+   This game-settings release adds migrations 0005 and 0006 for attack targets,
+   settlement outcomes, and repeatable powerup charges. Apply both before
+   deploying this build; the older realtime-only release had no migration.
 3. Run lint, typecheck, tests, webpack production build, and the two-instance
    smoke test from [the scale plan](realtime-scale-plan.md).
 4. Run a private live room through start, answer, automatic reveal, reconnect,
    next, and end.
 5. Promote the deployment and monitor Redis, QStash, Postgres, and SSE metrics.
+
+Before promotion, exercise both modes with each answer policy (after each,
+at end, never) and each leaderboard policy (after each live round, at end,
+hidden). For a live game, verify that standings do not leak while a question
+is open; test a Shield against an Attack, Safety net on a miss, and a repeated
+charge. Scheduled mode offers only Double up and Safety net. An Attack settles
+at the shared reveal; a reconnect must show the same score and outcome.
 
 For the repeatable 50/200/1,000-player checks, use the commands in
 [the realtime runbook](runbooks/realtime.md#load-test). Keep each run on a fresh

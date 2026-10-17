@@ -51,7 +51,8 @@ export const SubmitAnswerBody = z
     elapsedMs: z.number().int().min(0).optional(),
     // server-issued per-question view token (scheduled mode) for honest timing
     viewToken: z.string().optional(),
-    powerup: z.enum(["double", "shield"]).optional(),
+    powerup: z.enum(["double", "shield", "safety_net", "attack"]).optional(),
+    powerupTargetId: z.string().uuid().optional(),
   })
   .describe("Submit one answer to a question");
 
@@ -92,6 +93,8 @@ export const SessionPublic = z.object({
   participantCount: z.number().int(),
   participation: participationEnum,
   powerups: z.boolean(),
+  powerupUses: z.number().int(),
+  powerupTypes: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
   quiz: QuizSummary,
 });
 
@@ -125,7 +128,7 @@ export const QuestionPublic = z.object({
 
 export const QuestionList = z.object({
   answered: z.array(z.string().uuid()),
-  usedPowerups: z.array(z.enum(["double", "shield"])),
+  usedPowerups: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
   questions: z.array(QuestionPublic),
 });
 
@@ -140,11 +143,14 @@ export const AnswerResult = z.object({
   isCorrect: z.boolean().nullable(),
   pointsAwarded: z.number().int().nullable(),
   correctOptionId: z.string().uuid().nullable(),
+  attackStolen: z.number().int().optional(),
+  attackBlocked: z.boolean().optional(),
+  attackedLoss: z.number().int().optional(),
 });
 
 export const ParticipantProgress = z.object({
   answered: z.array(z.string().uuid()),
-  usedPowerups: z.array(z.enum(["double", "shield"])),
+  usedPowerups: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
   results: z.record(z.string(), AnswerResult),
 });
 

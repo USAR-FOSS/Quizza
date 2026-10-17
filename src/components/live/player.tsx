@@ -22,7 +22,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { LivePlayer } from "@/components/live/live-player";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "@/components/ui/question-media";
-import { PowerupPicker } from "@/components/live/powerup-picker";
+import { PowerupIntro, PowerupPicker } from "@/components/live/powerup-picker";
+import { AnswerReview } from "@/components/live/answer-review";
 import type { Powerup } from "@/lib/powerups";
 import { LoadingState } from "@/components/ui/loading-state";
 import { AvatarChoice } from "@/components/ui/avatar-choice";
@@ -351,6 +352,8 @@ export function Player({ code }: { code: string }) {
               key="intro"
               title={session.quiz.title}
               count={questions.length}
+              powerupTypes={session.powerupTypes}
+              powerupUses={session.powerupUses}
               onStart={() => setPhase("question")}
             />
           )}
@@ -365,7 +368,8 @@ export function Player({ code }: { code: string }) {
               onTimeout={advance}
               ready={Boolean(viewToken)}
               startedAt={startedAt}
-              powerups={Boolean(session?.powerups)}
+              powerupTypes={session?.powerupTypes ?? []}
+              powerupUses={session?.powerupUses ?? 1}
               usedPowerups={usedPowerups}
             />
           )}
@@ -381,7 +385,7 @@ export function Player({ code }: { code: string }) {
             />
           )}
 
-          {phase === "done" && <Done key="done" results={results} me={me} />}
+          {phase === "done" && <Done key="done" results={results} me={me} onRefresh={() => api.getResults(code).then(setResults)} />}
         </AnimatePresence>
       </main>
     </RoomTheme>
@@ -568,10 +572,14 @@ function JoinCard({
 function Intro({
   title,
   count,
+  powerupTypes,
+  powerupUses,
   onStart,
 }: {
   title: string;
   count: number;
+  powerupTypes: Powerup[];
+  powerupUses: number;
   onStart: () => void;
 }) {
   return (
@@ -588,6 +596,7 @@ function Intro({
         {count} {count === 1 ? "question" : "questions"}. Answer fast and
         accurately.
       </p>
+      <PowerupIntro types={powerupTypes} uses={powerupUses} />
       <button
         onClick={onStart}
         className="mt-7 flex h-14 w-full items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
@@ -606,7 +615,8 @@ function QuestionView({
   onTimeout,
   ready,
   startedAt,
-  powerups,
+  powerupTypes,
+  powerupUses,
   usedPowerups,
 }: {
   question: QuestionPublic;
@@ -621,7 +631,8 @@ function QuestionView({
   onTimeout: () => void;
   ready: boolean;
   startedAt?: string;
-  powerups: boolean;
+  powerupTypes: Powerup[];
+  powerupUses: number;
   usedPowerups: Powerup[];
 }) {
   const startRef = useRef<number>(0);
@@ -660,7 +671,7 @@ function QuestionView({
     setBusy(true);
     setError("");
     try {
-      await onSubmit({ ...payload, powerup });
+      await onSubmit({ ...payload, powerup: powerup && usedPowerups.filter((used) => used === powerup).length < powerupUses ? powerup : undefined });
     } catch (err) {
       done.current = false;
       setError(
@@ -696,16 +707,21 @@ function QuestionView({
           style={{ width: `${pct}%` }}
         />
       </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10" role="progressbar" aria-label="Quiz progress" aria-valuenow={index + 1} aria-valuemin={0} aria-valuemax={total}>
+        <div className="h-full rounded-full bg-mint transition-[width]" style={{ width: `${((index + 1) / total) * 100}%` }} />
+      </div>
 
       <h1 className="mt-6 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
         {question.prompt}
       </h1>
       <QuestionMedia url={question.mediaUrl} />
-      {powerups &&
+      {powerupTypes.length > 0 &&
         ["multiple_choice", "true_false"].includes(question.type) && (
           <PowerupPicker
             selected={powerup}
             used={usedPowerups}
+            uses={powerupUses}
+            available={powerupTypes}
             onChange={setPowerup}
             disabled={!ready || busy}
           />
@@ -875,9 +891,11 @@ function Feedback({
 function Done({
   results,
   me,
+  onRefresh,
 }: {
   results: Results | null;
   me: Identity | null;
+  onRefresh: () => Promise<void>;
 }) {
   const mine = results?.leaderboard.find(
     (e) => e.participantId === me?.participantId,
@@ -935,6 +953,16 @@ function Done({
             </div>
           ))}
         </div>
+      )}
+      {results && !results.showBoard && (
+        <p className="mt-5 text-sm text-ink-soft">The host is keeping standings private until the quiz closes, or has chosen to hide them.</p>
+      )}
+      <AnswerReview results={results} />
+      {results && !results.over && (
+        <button type="button" onClick={() => void onRefresh()}
+          className="mt-5 min-h-11 rounded-xl border-2 border-ink bg-white px-4 font-display font-bold shadow-pop transition-transform hover:-translate-y-0.5">
+          Check for final results
+        </button>
       )}
     </motion.div>
   );

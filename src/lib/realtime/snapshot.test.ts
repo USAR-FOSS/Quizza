@@ -5,6 +5,7 @@ const mock = vi.hoisted(() => ({
   rows: {} as Record<string, Record<string, unknown>[]>,
   quiz: vi.fn(),
   publish: vi.fn(),
+  settle: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -39,6 +40,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("./bus", () => ({ publish: mock.publish }));
+vi.mock("./settlement", () => ({ settleDueQuestion: mock.settle }));
 import { buildSnapshots } from "./snapshot";
 
 const quiz = {
@@ -67,6 +69,10 @@ describe("shared live reveal", () => {
     };
     globals.quizzaClocks?.clear();
     mock.publish.mockClear();
+    mock.settle.mockImplementation(async () => {
+      mock.rows.sessions[0].revealed = true;
+      return { status: "revealed" };
+    });
     mock.quiz.mockResolvedValue(quiz);
     mock.rows = {
       sessions: [
@@ -132,5 +138,16 @@ describe("shared live reveal", () => {
     expect(player.reveal?.correctOptionId).toBeNull();
     expect(player.leaderboard).toEqual([]);
     expect(host.correctOptionId).toBe("yes");
+  });
+  it.each([
+    ["per_question", true, "per_question", true],
+    ["at_end", false, "at_end", false],
+    ["never", false, "never", false],
+  ] as const)("gates answer policy %s (%s) and leaderboard policy %s (%s) at round reveal", async (revealAnswers, showAnswer, leaderboard, showBoard) => {
+    mock.rows.sessions[0].revealed = true;
+    mock.quiz.mockResolvedValue({ ...quiz, settings: { revealAnswers, leaderboard } });
+    const { player } = await buildSnapshots("room");
+    expect(player.reveal?.correctOptionId === "yes").toBe(showAnswer);
+    expect(player.leaderboard.length > 0).toBe(showBoard);
   });
 });

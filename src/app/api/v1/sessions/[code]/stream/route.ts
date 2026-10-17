@@ -64,6 +64,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
       let initializing = true;
       let newerState: unknown;
+      let playerPhase: string | undefined;
       let latestTick: number | undefined;
       const pendingRoster: Array<{
         participant: unknown;
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       unsubscribe = await subscribe(session.id, role, (event, eventId) => {
         if (event.kind === "state") {
           const state = role === "host" ? event.host : event.player;
+          playerPhase = state.phase;
           latestTick = undefined;
           if (initializing) newerState = state;
           else send(state);
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
           if (initializing) latestTick = event.answeredCount;
           else send({ tick: event.answeredCount });
         } else if (event.kind === "participant_changed") {
+          if (!initializing && role === "player" && playerPhase !== "lobby") return;
           const rosterEvent = {
             participant: event.participant,
             joined: event.joined,
@@ -106,14 +109,17 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       try {
         const snap = await buildSnapshots(session.id);
         if (closed) return;
-        send(newerState ?? (role === "host" ? snap.host : snap.player));
+        const firstState = (newerState ?? (role === "host" ? snap.host : snap.player)) as typeof snap.player;
+        playerPhase = firstState.phase;
+        send(firstState);
         if (latestTick !== undefined) send({ tick: latestTick });
-        for (const event of pendingRoster)
-          send({
-            participantChanged: event.participant,
-            joined: event.joined,
-            eventId: event.eventId,
-          });
+        if (role === "host" || playerPhase === "lobby")
+          for (const event of pendingRoster)
+            send({
+              participantChanged: event.participant,
+              joined: event.joined,
+              eventId: event.eventId,
+            });
         initializing = false;
       } catch (err) {
         cleanup();

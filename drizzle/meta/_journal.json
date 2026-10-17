@@ -36,6 +36,20 @@
       "when": 1792162012634,
       "tag": "0004_typical_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792230253055,
+      "tag": "0005_hesitant_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792230421028,
+      "tag": "0006_motionless_multiple_man",
+      "breakpoints": true
     }
   ]
 }

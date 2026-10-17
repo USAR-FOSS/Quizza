@@ -29,8 +29,9 @@ Goals:
 - Results and leaderboards ranked by accuracy and speed.
 - A clean, smooth UI.
 
-Non-goals for the near term (tracked as roadmap, not dropped): powerups,
-in-question multimedia pipelines, quests, and horizontal multi-region scale.
+Non-goals for the near term (tracked as roadmap, not dropped): a broader
+powerup catalog, rich media pipelines beyond current uploads, quests, and
+horizontal multi-region scale.
 
 ## 3. Context (C4 level 1)
 
@@ -325,7 +326,7 @@ MVP (in progress):
 
 Post-MVP (roadmap, data model has extension points):
 
-- Powerups (shield, attack, hint) with a catalog and a per-participant ledger.
+- A larger powerup catalog (for example hints) and richer per-player analytics.
 - In-question multimedia with object storage.
 - Custom participant data fields collected by the host at join.
 - Quests and other engagement mechanics.

@@ -12,6 +12,8 @@ import { publish } from "./bus";
 import { usesRedisRealtime } from "@/lib/redis/client";
 import { canRevealAnswers, canShowLeaderboard } from "@/lib/quiz-policy";
 import { seededShuffle } from "@/lib/shuffle";
+import { enabledPowerups, powerupUses } from "@/lib/powerups";
+import { settleDueQuestion } from "./settlement";
 import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
   HostSnapshot,
@@ -98,21 +100,13 @@ export async function buildSnapshots(
     const deadline =
       s.questionStartedAt.getTime() + timedQuestion.timeLimitSec * 1000;
     if (Date.now() >= deadline) {
-      const changed = await db
-        .update(sessions)
-        .set({ revealed: true })
-        .where(
-          and(
-            eq(sessions.id, s.id),
-            eq(sessions.status, "active"),
-            eq(sessions.currentQuestionId, timedQuestion.id),
-            eq(sessions.revealed, false),
-            eq(sessions.questionStartedAt, s.questionStartedAt),
-          ),
-        )
-        .returning({ id: sessions.id });
-      if (!changed.length) return buildSnapshots(sessionId);
-      s.revealed = true;
+      const result = await settleDueQuestion({
+        sessionId: s.id,
+        questionId: timedQuestion.id,
+        questionStartedAt: s.questionStartedAt.toISOString(),
+      });
+      if (result.status !== "early") return buildSnapshots(sessionId);
+      armReveal(s.id, Date.now() + result.retryAfter * 1000);
     } else armReveal(s.id, deadline);
   } else {
     const old = clocks.get(s.id);
@@ -222,6 +216,8 @@ export async function buildSnapshots(
       title: quiz?.title ?? "",
       theme: quiz?.theme ?? "grape",
       powerups: Boolean(settings.powerups),
+      powerupUses: powerupUses(settings),
+      powerupTypes: enabledPowerups(settings, s.mode),
       coverImage: settings.coverImage,
       iconImage: settings.iconImage,
       coverIcon: quiz?.coverIcon,

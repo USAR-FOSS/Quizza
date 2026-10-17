@@ -12,6 +12,11 @@ the database default for new questions to **100 points**. Existing question
 point values are preserved. Images live in Postgres, so include them in normal
 database backups; no writable public directory or external storage service is needed.
 
+Migrations 0005 and 0006 add powerup attack targets and outcomes, replace the
+old one-use unique index with a nonunique lookup index, and add the target
+lookup index. Apply them before this release. Existing answers and scores are
+preserved; existing quizzes with powerups enabled default to one charge each.
+
 Set `AUTH_SECRET` in production. The application no longer signs authentication
 or view tokens using a development fallback in production.
 
@@ -36,10 +41,18 @@ or view tokens using a development fallback in production.
   `speedBonus` overrides it. Correct answers earn 50–100% when enabled, otherwise
   full points. Live question shuffle uses a shared order for the room.
 - Questions now carry `mediaUrl`, and live questions carry scale settings.
-- `SubmitAnswerBody.powerup` accepts `double` or `shield` when the host enables
-  powerups. Each can be used once per participant per session, on scored
-  questions only. Double multiplies earned points by two. Shield awards half the
-  base points on a wrong answer and leaves a correct score unchanged.
+- `SubmitAnswerBody.powerup` accepts `double`, `safety_net`, `shield`, or
+  `attack` when enabled by the host. The host selects one to three uses of each
+  enabled powerup per player. Double multiplies earned points by two; Safety
+  net earns one third of the question points on a miss. Shield blocks attacks
+  for the round. Attack requires `powerupTargetId`, steals the target's earned
+  question points if they answered correctly, or up to one third of the
+  question points from their existing score otherwise. Transfers occur once at
+  the live shared reveal. Shield and Attack are live-only. The player receives
+  a powerup introduction before play and decides whether to spend one on each
+  scored question.
+- `GET /sessions/{code}/participants?search=...` authenticates with
+  `x-client-token` and returns at most 20 other room players to target.
 - CSV downloads require `Authorization: Bearer <host token>`. Query-string host
   credentials are no longer accepted for exports. JSON summaries are generated
   from the host's gated results response in the browser.
@@ -73,7 +86,8 @@ concurrency target; do not claim that target from unit tests alone.
 New production environment variables are documented in `.env.example` and
 `docs/deployment.md`: `REDIS_URL`, `REALTIME_DRIVER=redis`, `APP_URL`,
 `QSTASH_TOKEN`, both QStash signing keys, and `DB_POOL_MAX`. No database
-migration is required for this realtime change.
+migration was required for the earlier realtime-only change; this
+later powerup update requires migrations 0005 and 0006.
 
 ## Validation
 

@@ -48,6 +48,8 @@ export interface PlayerSnapshot {
     title: string;
     theme: string;
     powerups?: boolean;
+    powerupUses?: number;
+    powerupTypes?: import("@/lib/db/schema-types").Powerup[];
     coverImage?: string | null;
     iconImage?: string | null;
     coverIcon?: string;
@@ -62,6 +64,7 @@ export interface PlayerSnapshot {
     numberAverage: number | null;
   } | null;
   leaderboard: LiveLeaderboardEntry[];
+  /** Searchable attack targets are fetched separately; never expose scores here. */
 }
 
 export interface HostSnapshot extends PlayerSnapshot {
