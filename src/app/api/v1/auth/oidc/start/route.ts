@@ -21,6 +21,10 @@ export async function GET(req: NextRequest) {
   const challenge = b64url(createHash("sha256").update(verifier).digest());
   const state = b64url(randomBytes(16));
   const nonce = b64url(randomBytes(16));
+  const requestedNext = req.nextUrl.searchParams.get("next") ?? "";
+  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") && !requestedNext.includes("\\")
+    ? requestedNext
+    : "/dashboard";
 
   const jar = await cookies();
   const opts = {
@@ -33,6 +37,7 @@ export async function GET(req: NextRequest) {
   jar.set("oidc_verifier", verifier, opts);
   jar.set("oidc_state", state, opts);
   jar.set("oidc_nonce", nonce, opts);
+  jar.set("oidc_next", next, opts);
 
   const auth = new URL(`${issuer}/auth`);
   auth.searchParams.set("response_type", "code");

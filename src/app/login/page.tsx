@@ -9,7 +9,7 @@ export const metadata = { title: "Sign in - quizza" };
 
 function safeNext(next: string | undefined): string | undefined {
   // internal paths only, never an open redirect
-  return next && next.startsWith("/") && !next.startsWith("//")
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")
     ? next
     : undefined;
 }

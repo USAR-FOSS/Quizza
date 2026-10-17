@@ -153,7 +153,7 @@ export function AuthForm({
             <span className="h-px flex-1 bg-ink/15" />
           </div>
           <a
-            href="/api/v1/auth/oidc/start"
+            href={`/api/v1/auth/oidc/start${next ? `?next=${encodeURIComponent(next)}` : ""}`}
             className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-paper font-display font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5"
           >
             <GithubIcon className="size-5" />
