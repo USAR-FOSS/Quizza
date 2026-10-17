@@ -6,7 +6,7 @@ const base = process.env.BASE_URL?.replace(/\/$/, "");
 const code = process.env.ROOM_CODE;
 const count = Number(process.env.COUNT ?? 52);
 const output = process.env.PLAYERS_FILE ?? "scripts/load/live.players.json";
-const delayMs = Number(process.env.JOIN_DELAY_MS ?? 2600);
+const delayMs = Number(process.env.JOIN_DELAY_MS ?? 50);
 if (!base || !/^https?:\/\//.test(base) || !code || !Number.isInteger(count) || count < 1 || !Number.isFinite(delayMs) || delayMs < 0) {
   throw new Error("Set BASE_URL, ROOM_CODE, COUNT, and a nonnegative JOIN_DELAY_MS");
 }
