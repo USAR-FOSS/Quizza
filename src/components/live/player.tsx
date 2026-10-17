@@ -347,7 +347,7 @@ export function Player({ code }: { code: string }) {
           )}
 
           {phase === "join" && (
-            <JoinCard key="join" quiz={session?.quiz} onJoin={handleJoin} />
+            <JoinCard key="join" code={code} quiz={session?.quiz} onJoin={handleJoin} />
           )}
 
           {phase === "intro" && session && (
@@ -471,9 +471,11 @@ function Message({
 }
 
 function JoinCard({
+  code,
   quiz,
   onJoin,
 }: {
+  code: string;
   quiz?: SessionPublic["quiz"];
   onJoin: (
     nickname: string,
@@ -562,6 +564,9 @@ function JoinCard({
       >
         {busy ? "Getting you ready…" : "Get started"}
       </button>
+      <p className="mt-4 text-center text-sm text-ink-soft">
+        <Link className="font-bold text-grape underline-offset-4 hover:underline" href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}>Sign in</Link>
+      </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-grape-dark">
           {error}
@@ -643,6 +648,8 @@ function QuestionView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [powerup, setPowerup] = useState<Powerup>();
+  const [selectedOptionId, setSelectedOptionId] = useState<string>();
+  const [selectedNumber, setSelectedNumber] = useState<number>();
 
   useEffect(() => {
     if (!startedAt) return;
@@ -668,6 +675,8 @@ function QuestionView({
     numberValue?: number;
   }) {
     if (done.current || !ready || busy) return;
+    setSelectedOptionId(payload.optionId);
+    setSelectedNumber(payload.numberValue);
     done.current = true;
     setBusy(true);
     setError("");
@@ -751,11 +760,13 @@ function QuestionView({
               <button
                 key={o.id}
                 onClick={() => pick({ optionId: o.id })}
+                aria-pressed={selectedOptionId === o.id}
                 className={cn(
-                  "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
+                  "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-all duration-150 hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
                   COLOR_BG[(o.color as OptionColor) ?? "grape"] ?? "bg-grape",
                   COLOR_TEXT[(o.color as OptionColor) ?? "grape"] ??
                     "text-white",
+                  selectedOptionId === o.id && "scale-[1.01] ring-2 ring-white ring-offset-2 ring-offset-ink",
                 )}
               >
                 {o.label}
@@ -768,7 +779,8 @@ function QuestionView({
               <button
                 key={n}
                 onClick={() => pick({ numberValue: n })}
-                className="flex size-14 items-center justify-center rounded-2xl border-2 border-ink bg-paper-2 font-display text-xl font-extrabold text-ink shadow-pop transition-transform hover:-translate-y-0.5"
+                aria-pressed={selectedNumber === n}
+                className={cn("flex size-14 items-center justify-center rounded-2xl border-2 border-ink bg-paper-2 font-display text-xl font-extrabold text-ink shadow-pop transition-all duration-150 hover:-translate-y-0.5", selectedNumber === n && "scale-105 bg-lime ring-2 ring-grape")}
               >
                 {n}
               </button>

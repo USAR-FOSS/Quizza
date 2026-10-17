@@ -112,10 +112,15 @@ export async function GET(req: NextRequest) {
     }
 
     await createSessionCookie(userId);
+    const requestedNext = jar.get("oidc_next")?.value;
+    const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") && !requestedNext.includes("\\")
+      ? requestedNext
+      : "/dashboard";
     jar.delete("oidc_verifier");
     jar.delete("oidc_state");
     jar.delete("oidc_nonce");
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    jar.delete("oidc_next");
+    return NextResponse.redirect(new URL(next, req.url));
   } catch (err) {
     console.error("[oidc] callback failed", err);
     return fail(req, "oidc_error");

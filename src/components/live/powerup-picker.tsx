@@ -13,7 +13,7 @@ export function PowerupIntro({ types, uses }: { types: Powerup[]; uses: number }
   if (!types.length) return null;
   return (
     <div className="mt-5 rounded-2xl border-2 border-ink/15 bg-sun/10 p-4 text-left">
-      <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Powerups · choose {uses} {uses === 1 ? "time" : "times"} total</p>
+      <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Powerups · {uses} {uses === 1 ? "use" : "uses"} across the quiz</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {POWERUP_ORDER.filter((item) => types.includes(item)).map((item) => {
           const Icon = icons[item];
@@ -23,7 +23,7 @@ export function PowerupIntro({ types, uses }: { types: Powerup[]; uses: number }
           </div>;
         })}
       </div>
-      <p className="mt-3 text-xs text-ink-soft">One per question. Save them for any scored round.</p>
+      <p className="mt-3 text-xs text-ink-soft">Choose a powerup before locking in an answer. Unused powerups stay available for later questions.</p>
     </div>
   );
 }

@@ -144,7 +144,7 @@ export function LivePlayer({ code }: { code: string }) {
   if (!me) {
     return (
       <Screen>
-        <JoinForm onJoin={join} quiz={session.quiz} />
+        <JoinForm onJoin={join} quiz={session.quiz} code={code} />
       </Screen>
     );
   }
@@ -520,12 +520,12 @@ function QuestionLive({
                   onClick={() => setSelection({ optionId: o.id })}
                   aria-pressed={selection?.optionId === o.id}
                   className={cn(
-                    "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
+                    "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-all duration-150 hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
                     COLOR_BG[(o.color as OptionColor) ?? "grape"] ?? "bg-grape",
                     COLOR_TEXT[(o.color as OptionColor) ?? "grape"] ??
                       "text-white",
                     selection?.optionId === o.id &&
-                      "ring-4 ring-ink ring-offset-4 ring-offset-paper",
+                      "scale-[1.01] ring-2 ring-white ring-offset-2 ring-offset-ink",
                   )}
                 >
                   {o.label}
@@ -547,7 +547,7 @@ function QuestionLive({
                   aria-pressed={selection?.numberValue === n}
                   className={cn(
                     "flex size-14 items-center justify-center rounded-2xl border-2 border-ink bg-paper-2 font-display text-xl font-extrabold text-ink shadow-pop transition-transform hover:-translate-y-0.5",
-                    selection?.numberValue === n && "ring-4 ring-grape",
+                    selection?.numberValue === n && "scale-105 bg-lime ring-2 ring-grape transition-all duration-150",
                   )}
                 >
                   {n}
@@ -805,6 +805,7 @@ function FinalBoard({
 function JoinForm({
   onJoin,
   quiz,
+  code,
 }: {
   onJoin: (
     nickname: string,
@@ -812,6 +813,7 @@ function JoinForm({
     photo: File | null,
   ) => Promise<void>;
   quiz: SessionPublic["quiz"];
+  code: string;
 }) {
   const [nickname, setNickname] = useState("");
   const [color, setColor] = useState<string>(OPTION_COLORS[0]);
@@ -893,6 +895,9 @@ function JoinForm({
       >
         {busy ? "Making room for you…" : "I’m in — join the room"}
       </button>
+      <p className="mt-4 text-center text-sm text-ink-soft">
+        <Link className="font-bold text-grape underline-offset-4 hover:underline" href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}>Sign in</Link>
+      </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-grape-dark">
           {error}
