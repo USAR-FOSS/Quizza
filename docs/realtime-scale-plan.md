@@ -154,6 +154,7 @@ Centralize and validate channel construction in `channels.ts`:
 quizza:v1:session:<session UUID>:state
 quizza:v1:session:<session UUID>:host
 quizza:v1:session:<session UUID>:roster
+quizza:v1:session:<session UUID>:presence
 ```
 
 Only accept a UUID obtained from Postgres. Never place room codes, host tokens,
@@ -247,6 +248,10 @@ Suggested commit: `feat: add redis realtime backplane`
    snapshot completion is not lost.
 3. Send `retry: 1500\n\n` once when the stream opens.
 4. Keep a heartbeat comment every 20–25 seconds.
+   In live rooms, each heartbeat also refreshes the player's Redis presence
+   lease. Leases expire after 65 seconds; active stream heartbeats prune expired
+   members and publish roster removals. Lobby snapshots include only leased
+   participants; scores and participant records remain in Postgres.
 5. Intentionally close the stream after 270 seconds. `EventSource` will reconnect
    before Vercel's common five-minute ceiling, and the fresh snapshot repairs
    any missed Pub/Sub events.
@@ -261,11 +266,11 @@ Suggested commit: `feat: add redis realtime backplane`
 Keep full snapshots as replacements. Merge small events as follows:
 
 - `tick`: replace only host `answeredCount`;
-- `participant_changed`: upsert the participant by ID in the lobby roster;
-  increment `participantCount` only when `joined` is true and the ID was not
-  already present;
-- outside the lobby, keep the count accurate but do not reveal a hidden
-  leaderboard.
+- `participant_changed`: add/remove the participant from `onlineParticipants`;
+  adjust the lobby count only when membership actually changes. Leaving never
+  deletes the participant record or score;
+- apply leave tombstones to the next full snapshot so a stale participant row
+  cannot resurrect a departed lobby avatar.
 
 Event application must be idempotent by `eventId`; retain a bounded set of the
 last 100 IDs per connection, then discard old IDs.
@@ -295,11 +300,11 @@ Suggested commit: `feat: make live SSE reconnectable across instances`
 
 ### Roster updates
 
-Delete the process-local `pending` debounce for rosters. After a successful new
-live join, publish one `participant_changed` event with `joined: true`. After an
-avatar change, publish the same participant with `joined: false`. Convert the DB
-participant to `LiveLeaderboardEntry` in one shared helper; never include the
-client token.
+Delete the process-local `pending` debounce for rosters. After a successful live
+join/stream connect, publish `participant_changed` with `joined: true`. On
+explicit leave publish `joined: false`; lease expiry handles abrupt disconnects.
+After an avatar change, publish the updated participant entry. Never include
+the client token.
 
 Initial connection and reconnect still use `buildSnapshots`, so roster events
 do not need persistence or replay.

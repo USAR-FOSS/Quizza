@@ -1,4 +1,5 @@
 import { Client } from "@upstash/qstash";
+import { createHash } from "node:crypto";
 
 type RevealJob = {
   sessionId: string;
@@ -23,6 +24,11 @@ function revealUrl(): string {
   return `${appUrl}/api/internal/realtime/reveal`;
 }
 
+export function revealDeduplicationId(job: RevealJob): string {
+  const identity = `${job.sessionId}:${job.questionId}:${job.questionStartedAt}`;
+  return `reveal-${createHash("sha256").update(identity).digest("hex")}`;
+}
+
 /** Schedules one idempotent callback at the exact server deadline. */
 export async function scheduleReveal(job: RevealJob, deadlineMs: number) {
   const localDevelopment = process.env.APP_URL?.startsWith("http://localhost");
@@ -35,7 +41,7 @@ export async function scheduleReveal(job: RevealJob, deadlineMs: number) {
     notBefore: Math.ceil(deadlineMs / 1000),
     retries: 5,
     retryDelay: "1000 * (1 + retried)",
-    deduplicationId: `reveal:${job.sessionId}:${job.questionId}:${job.questionStartedAt}`,
+    deduplicationId: revealDeduplicationId(job),
   });
   console.info("[realtime] reveal scheduled", {
     sessionId: job.sessionId,

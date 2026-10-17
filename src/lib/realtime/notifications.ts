@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { answers, participants } from "@/lib/db/schema";
 import { getRedisPublisher, usesRedisRealtime } from "@/lib/redis/client";
@@ -33,19 +33,31 @@ export function scheduleRoster(
   participantId: string,
   joined: boolean,
 ) {
+  scheduleRosterBatch(sessionId, [participantId], joined);
+}
+
+/** Batch-fetch expired members so a large disconnect does not fan out DB reads. */
+export function scheduleRosterBatch(
+  sessionId: string,
+  participantIds: string[],
+  joined: boolean,
+) {
+  if (!participantIds.length) return;
   void (async () => {
-    const participant = await db.query.participants.findFirst({
-      where: and(
-        eq(participants.id, participantId),
+    const rows = await db
+      .select()
+      .from(participants)
+      .where(and(
         eq(participants.sessionId, sessionId),
-      ),
-    });
-    if (!participant) return;
-    await publish(sessionId, {
-      kind: "participant_changed",
-      participant: participantEntry(participant),
-      joined,
-    });
+        inArray(participants.id, participantIds),
+      ));
+    await Promise.all(rows.map((participant) =>
+      publish(sessionId, {
+        kind: "participant_changed",
+        participant: participantEntry(participant),
+        joined,
+      }),
+    ));
   })().catch((err) => console.error("[realtime] roster", err));
 }
 

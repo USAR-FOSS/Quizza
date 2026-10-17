@@ -55,6 +55,8 @@ export interface PlayerSnapshot {
     coverIcon?: string;
   };
   participantCount: number;
+  /** Lobby avatars currently connected to the live room, independent of scores. */
+  onlineParticipants: Array<Pick<LiveLeaderboardEntry, "participantId" | "nickname" | "avatarColor" | "avatarUrl">>;
   question: LiveQuestion | null;
   reveal: {
     correctOptionId: string | null;

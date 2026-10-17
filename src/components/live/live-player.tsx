@@ -162,6 +162,21 @@ function Connected({ code, me }: { code: string; me: Identity }) {
   const [previousAnswers, setPreviousAnswers] = useState<string[]>([]);
   const startRef = useRef<number>(0);
 
+  useEffect(() => {
+    let left = false;
+    const leave = () => {
+      if (left) return;
+      left = true;
+      void fetch(`/api/v1/sessions/${encodeURIComponent(code)}/leave`, {
+        method: "POST",
+        headers: { "x-client-token": me.clientToken },
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", leave);
+    return () => window.removeEventListener("pagehide", leave);
+  }, [code, me.clientToken]);
+
   const q = snap?.question ?? null;
   useEffect(() => {
     let alive = true;
@@ -314,7 +329,7 @@ function Connected({ code, me }: { code: string; me: Identity }) {
             >
               <QuizCover quiz={snap.quiz} />
               <PowerupIntro types={snap.quiz.powerupTypes ?? []} uses={snap.quiz.powerupUses ?? 1} />
-              <LobbyCrowd players={snap.leaderboard} meId={me.participantId} />
+          <LobbyCrowd players={snap.onlineParticipants} meId={me.participantId} />
             </Panel>
           )}
 
