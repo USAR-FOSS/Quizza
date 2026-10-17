@@ -39,17 +39,19 @@ short-lived preview hostname for a long-running event.
 
 ## Deployment order
 
-1. Deploy the code to Preview.
-2. Apply database migrations separately with `pnpm db:migrate` against the
-   Preview database. Before Production promotion, apply them to Production too.
-   This game-settings release adds migrations 0005 and 0006 for attack targets,
-   settlement outcomes, and repeatable powerup charges. Apply both before
-   deploying this build; the older realtime-only release had no migration.
+1. Back up the Preview database, verify the connection points to Preview, and
+   apply migrations there with `pnpm db:migrate`. This game-settings release
+   adds migrations 0005 and 0006 for attack targets, settlement outcomes, and
+   repeatable powerup charges. The older realtime-only release had no migration.
+2. Deploy the code to Preview. Keep Preview and Production on separate databases
+   and Redis/QStash credentials.
 3. Run lint, typecheck, tests, webpack production build, and the two-instance
    smoke test from [the scale plan](realtime-scale-plan.md).
 4. Run a private live room through start, answer, automatic reveal, reconnect,
    next, and end.
-5. Promote the deployment and monitor Redis, QStash, Postgres, and SSE metrics.
+5. Back up Production, verify the production database connection, apply the
+   migrations to Production, then promote the deployment. Monitor Redis,
+   QStash, Postgres, and SSE metrics.
 
 Before promotion, exercise both modes with each answer policy (after each,
 at end, never) and each leaderboard policy (after each live round, at end,
