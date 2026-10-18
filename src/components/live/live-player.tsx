@@ -66,9 +66,10 @@ export function LivePlayer({ code }: { code: string }) {
     avatarColor: string,
     photo: File | null,
     teamName?: string,
+    email?: string,
   ) {
     try {
-      const p = await api.join(code, { nickname, avatarColor, teamName });
+      const p = await api.join(code, { nickname, avatarColor, teamName, email });
       const identity: Identity = {
         clientToken: p.clientToken,
         participantId: p.id,
@@ -91,7 +92,7 @@ export function LivePlayer({ code }: { code: string }) {
       if (session) savePlayerIdentity(session.id, identity);
       setMe(identity);
     } catch (err) {
-      if (err instanceof ApiClientError && err.code === "signin_required") {
+      if (err instanceof ApiClientError && ["signin_required", "oidc_required"].includes(err.code)) {
         setSigninRequired(true);
       } else {
         if (err instanceof ApiClientError && err.code === "team_full")
@@ -126,7 +127,9 @@ export function LivePlayer({ code }: { code: string }) {
             Sign in to play
           </h1>
           <p className="mt-2 text-ink-soft">
-            This quiz allows one attempt per person, so it needs you signed in.
+            {session.teamEmailVerification
+              ? "Sign in with FOSSClub to join a rostered team."
+              : "This quiz allows one attempt per person, so it needs you signed in."}
           </p>
           <Link
             href={`/login?next=${encodeURIComponent(`/play/${code}`)}`}
@@ -818,6 +821,7 @@ function JoinForm({
     color: string,
     photo: File | null,
     teamName?: string,
+    email?: string,
   ) => Promise<void>;
   session: SessionPublic;
   code: string;
@@ -828,16 +832,17 @@ function JoinForm({
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [teamName, setTeamName] = useState("");
+  const [email, setEmail] = useState("");
   const teams = session.teams ?? [];
   const requiresTeam = session.teamSize != null;
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
-    if (!nickname.trim() || (requiresTeam && !teamName) || busy) return;
+    if (!nickname.trim() || (requiresTeam && !teamName) || (session.teamEmailVerification && !email.trim()) || busy) return;
     setBusy(true);
     setError("");
     try {
-      await onJoin(nickname.trim(), color, photo, teamName || undefined);
+      await onJoin(nickname.trim(), color, photo, teamName || undefined, email.trim() || undefined);
     } catch (err) {
       if (err instanceof ApiClientError && ["team_full", "team_required"].includes(err.code)) setTeamName("");
       setError(
@@ -900,9 +905,15 @@ function JoinForm({
         onChange={setPhoto}
       />
       {requiresTeam && <TeamPicker teams={teams} teamSize={session.teamSize ?? 1} value={teamName} onChange={setTeamName} />}
+      {session.teamEmailVerification && <div className="mt-4">
+        <label htmlFor="live-team-email" className="mb-2 block text-sm font-bold text-ink">Email listed for your team</label>
+        <input id="live-team-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)}
+          placeholder="you@example.org" maxLength={160}
+          className="w-full rounded-2xl border-2 border-ink bg-paper-2 px-4 py-3 text-ink placeholder:text-ink-soft/60 focus:border-grape focus:bg-white focus:outline-none" />
+      </div>}
       <button
         type="submit"
-        disabled={!nickname.trim() || (requiresTeam && !teamName) || busy}
+        disabled={!nickname.trim() || (requiresTeam && !teamName) || (session.teamEmailVerification && !email.trim()) || busy}
         className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display text-lg font-bold text-white shadow-pop disabled:opacity-50"
       >
         {busy ? "Making room for you…" : "I’m in — join the room"}

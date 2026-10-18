@@ -28,6 +28,7 @@ export type SessionPublic = {
   participation: ParticipationMode;
   teams: { name: string; joined: number }[];
   teamSize: number | null;
+  teamEmailVerification: boolean;
   powerups: boolean;
   powerupUses: number;
   powerupTypes: Powerup[];
@@ -192,7 +193,7 @@ export const api = {
       headers: { "x-client-token": clientToken },
     }),
 
-  join: (code: string, body: { nickname: string; avatarColor?: string; teamName?: string }) =>
+  join: (code: string, body: { nickname: string; avatarColor?: string; teamName?: string; email?: string }) =>
     request<ParticipantCreated>(`/sessions/${code}/participants`, {
       method: "POST",
       body: JSON.stringify(body),

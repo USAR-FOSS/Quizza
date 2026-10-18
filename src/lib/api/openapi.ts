@@ -152,7 +152,7 @@ const routes: RouteDef[] = [
     tags: ["Participants"],
     summary: "Join a session",
     description:
-      "Joins with a nickname and, when enabled, a teamName from the session's team list. The server enforces the team capacity. Signed-in quizzes also require an account. Returns a clientToken used to submit answers and reconnect.",
+      "Joins with a nickname and, when enabled, a teamName from the session's team list. Roster-protected teams also require FOSSClub sign-in and an email listed for that team. The server enforces team capacity. Returns a clientToken used to submit answers and reconnect.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
     ],

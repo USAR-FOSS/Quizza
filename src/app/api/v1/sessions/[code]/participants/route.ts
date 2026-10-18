@@ -65,6 +65,7 @@ export const POST = handle<Ctx>(async (req: NextRequest, { params }) => {
   const participant = await joinSession(code, body, {
     userId: user?.id ?? null,
     deviceId,
+    oidcSubject: user?.subject ?? null,
   });
   return json(participant, 201);
 });

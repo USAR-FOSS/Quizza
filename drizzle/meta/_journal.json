@@ -57,6 +57,13 @@
       "when": 1792301981932,
       "tag": "0007_left_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792307934975,
+      "tag": "0008_bright_jane_foster",
+      "breakpoints": true
     }
   ]
 }
