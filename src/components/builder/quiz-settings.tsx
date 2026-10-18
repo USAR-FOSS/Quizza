@@ -14,7 +14,7 @@ import {
 import type { QuizSettings } from "@/lib/db/schema-types";
 import { POWERUP_INFO, POWERUP_ORDER, powerupUses } from "@/lib/powerups";
 import { cn } from "@/lib/utils";
-import { MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, parseTeamCsv, searchTeams } from "@/lib/teams";
+import { MAX_TEAM_MEMBERS, MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, normalizeTeamRoster, parseTeamCsv, parseTeamRosterColumns, parseTeamRosterCsv, searchTeams, type TeamMember } from "@/lib/teams";
 
 export function QuizSettingsPanel({
   settings,
@@ -50,7 +50,7 @@ export function QuizSettingsPanel({
       <Group
         icon={<Users className="size-4" />}
         title="Who can play"
-        options={PARTICIPATION_OPTIONS}
+        options={settings.teamEmailVerification ? PARTICIPATION_OPTIONS.filter((item) => item.value === "signed_in") : PARTICIPATION_OPTIONS}
         value={participationMode(settings)}
         onChange={(v) =>
           onChange({ participation: v as QuizSettings["participation"] })
@@ -161,8 +161,15 @@ function TeamSettings({ settings, onChange }: {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
   const [importing, setImporting] = useState(false);
+  const [memberTeams, setMemberTeams] = useState("");
+  const [memberEmails, setMemberEmails] = useState("");
+  const [memberFilter, setMemberFilter] = useState("");
   const names = normalizeTeamNames(settings.teamNames ?? []);
   const visible = searchTeams(names.map((name) => ({ name })), filter, 30);
+  const roster = settings.teamRoster ?? [];
+  const visibleMembers = roster.filter((member) =>
+    `${member.teamName} ${member.email}`.toLowerCase().includes(memberFilter.trim().toLowerCase()),
+  ).slice(0, 30);
 
   function addNames(added: string[]): boolean {
     if (!added.length) return false;
@@ -199,6 +206,31 @@ function TeamSettings({ settings, onChange }: {
     }
   }
 
+  function addMembers(added: TeamMember[]): boolean {
+    if (!added.length) return false;
+    try {
+      const nextNames = normalizeTeamNames([...names, ...added.map((member) => member.teamName)]);
+      if (nextNames.length > MAX_TEAM_NAMES || nextNames.some((name) => name.length > MAX_TEAM_NAME_LENGTH))
+        throw new Error(`Use up to ${MAX_TEAM_NAMES.toLocaleString()} teams with names under ${MAX_TEAM_NAME_LENGTH} characters.`);
+      const nextRoster = normalizeTeamRoster([...roster, ...added], nextNames, settings.teamSize ?? 1);
+      onChange({ teamNames: nextNames, teamRoster: nextRoster });
+      setError("");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Check the team roster.");
+      return false;
+    }
+  }
+
+  async function importRosterCsv(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2_000_000) { setError("Choose a CSV smaller than 2 MB."); return; }
+    setImporting(true);
+    try { addMembers(parseTeamRosterCsv(await file.text())); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t read the roster CSV."); }
+    finally { setImporting(false); }
+  }
+
   return <div className="mt-3 rounded-2xl border border-ink/15 bg-white/60 p-4">
     <p className="text-sm text-ink-soft">Add team names, then set how many players may join each team.</p>
     <label htmlFor="team-names" className="mt-3 block text-xs font-bold uppercase tracking-wider text-ink-soft">Team names</label>
@@ -221,7 +253,10 @@ function TeamSettings({ settings, onChange }: {
         className="mt-2 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" />
       <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{visible.map(({ name }) =>
         <span key={name.toLowerCase()} className="inline-flex items-center gap-2 rounded-full border border-ink/20 bg-paper px-3 py-1 text-sm font-semibold">
-          {name}<button type="button" onClick={() => onChange({ teamNames: names.filter((item) => item !== name) })}
+          {name}<button type="button" onClick={() => onChange({
+            teamNames: names.filter((item) => item !== name),
+            teamRoster: roster.filter((member) => member.teamName !== name),
+          })}
             aria-label={`Remove ${name}`} className="text-ink-soft hover:text-coral">×</button>
         </span>)}</div>
       {names.length > visible.length && <p className="mt-1 text-xs text-ink-soft">Search to see more teams.</p>}
@@ -229,9 +264,54 @@ function TeamSettings({ settings, onChange }: {
     <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-soft">Players per team</p>
     <div className="mt-2 grid grid-cols-4 gap-2">{([1, 2, 3, 4] as const).map((size) =>
       <button key={size} type="button" aria-pressed={(settings.teamSize ?? 1) === size}
-        onClick={() => onChange({ teamSize: size })}
+        onClick={() => {
+          try { normalizeTeamRoster(roster, names, size); onChange({ teamSize: size }); setError(""); }
+          catch (cause) { setError(cause instanceof Error ? cause.message : "Check the roster size."); }
+        }}
         className={cn("min-h-11 rounded-xl border-2 font-display font-bold transition-colors", (settings.teamSize ?? 1) === size ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}>{size}</button>)}</div>
     {!names.length && <p className="mt-3 text-sm text-coral">Add at least one team before launching.</p>}
+
+    <div className="mt-5 border-t border-ink/15 pt-5">
+      <Toggle label="Check team members by email" on={settings.teamEmailVerification ?? false}
+        onChange={(teamEmailVerification) => onChange({
+          teamEmailVerification,
+          ...(teamEmailVerification ? { participation: "signed_in" as const } : {}),
+        })} />
+      {settings.teamEmailVerification && <div className="mt-3 space-y-3">
+        <p className="text-xs text-ink-soft">Players sign in with FOSSClub, choose a team, then enter a listed email. This checks the list; it does not prove they own that address.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label htmlFor="member-teams" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Team names</label>
+            <textarea id="member-teams" value={memberTeams} onChange={(event) => setMemberTeams(event.target.value)}
+              placeholder={"Blue Birds\nBlue Birds\nRed"} rows={4}
+              className="mt-1 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" /></div>
+          <div><label htmlFor="member-emails" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Emails</label>
+            <textarea id="member-emails" value={memberEmails} onChange={(event) => setMemberEmails(event.target.value)}
+              placeholder={"a@example.org\nb@example.org\nc@example.org"} rows={4}
+              className="mt-1 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" /></div>
+        </div>
+        <button type="button" disabled={!memberTeams.trim() || !memberEmails.trim() || roster.length >= MAX_TEAM_MEMBERS}
+          onClick={() => {
+            try {
+              if (addMembers(parseTeamRosterColumns(memberTeams, memberEmails))) { setMemberTeams(""); setMemberEmails(""); }
+            } catch (cause) { setError(cause instanceof Error ? cause.message : "Check both columns."); }
+          }} className="rounded-xl border-2 border-ink bg-lime px-4 py-2 text-sm font-bold shadow-pop disabled:opacity-40">Add members</button>
+        <div><label htmlFor="team-roster-csv" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Import member CSV</label>
+          <input id="team-roster-csv" type="file" accept=".csv,text/csv" disabled={importing || roster.length >= MAX_TEAM_MEMBERS}
+            onChange={(event) => { void importRosterCsv(event.target.files?.[0]); event.target.value = ""; }}
+            className="mt-2 block w-full text-sm file:mr-3 file:rounded-xl file:border-2 file:border-ink file:bg-paper file:px-3 file:py-2 file:font-bold disabled:opacity-40" />
+          <p className="mt-1 text-xs text-ink-soft">Headers: Team Names, Emails. One row per member; repeat the team name for teammates.</p></div>
+        <div><label htmlFor="member-filter" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Members ({roster.length.toLocaleString()})</label>
+          <input id="member-filter" value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} placeholder="Search team or email"
+            className="mt-1 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" />
+          <div className="mt-2 max-h-44 overflow-y-auto">{visibleMembers.map((member) =>
+            <div key={member.email} className="flex items-center justify-between gap-2 border-b border-ink/10 py-1 text-xs">
+              <span className="min-w-0 truncate"><strong>{member.teamName}</strong> · {member.email}</span>
+              <button type="button" onClick={() => onChange({ teamRoster: roster.filter((row) => row.email !== member.email) })}
+                aria-label={`Remove ${member.email}`} className="shrink-0 text-ink-soft hover:text-coral">×</button>
+            </div>)}</div>
+          {roster.length > visibleMembers.length && <p className="mt-1 text-xs text-ink-soft">Search to see more members.</p>}</div>
+      </div>}
+    </div>
   </div>;
 }
 

@@ -26,6 +26,10 @@ Apply it before deploying the team picker. Existing participants remain
 unassigned. Team names and the 1–4 player limit live in quiz settings; the
 join endpoint validates the choice and checks capacity under a database lock.
 
+Optional team email rosters require no additional migration. They are stored
+in the existing quiz settings JSON. See [Team email roster](team-roster.md)
+for CSV headers, launch rules, and the security limitation of a typed email.
+
 Participation now defaults to one attempt per device when a quiz has no explicit
 policy. Quizzes explicitly set to anonymous still allow retries; choose
 "Signed in, one try" when account-level replay protection matters. A device

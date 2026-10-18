@@ -32,8 +32,8 @@ import { signViewToken, verifyViewToken } from "@/lib/view-token";
 import { isClean } from "@/lib/moderation";
 import { csvField } from "@/lib/csv";
 import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
-import { matchingTeamName, normalizeTeamNames } from "@/lib/teams";
-import { getCurrentUser } from "@/lib/auth";
+import { matchingTeamName, normalizeTeamNames, normalizeTeamRoster, rosterTeamForEmail } from "@/lib/teams";
+import { getCurrentUser, oidcEnabled } from "@/lib/auth";
 import type { z } from "zod";
 import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
@@ -45,7 +45,7 @@ import type {
 type SessionRow = typeof sessions.$inferSelect;
 
 /** Context the API routes gather from the request for the lib functions. */
-export type JoinContext = { userId: string | null; deviceId: string | null };
+export type JoinContext = { userId: string | null; deviceId: string | null; oidcSubject?: string | null };
 export type ResultsContext = {
   hostToken: string | null;
   clientToken: string | null;
@@ -79,6 +79,20 @@ export async function validateQuizForLaunch(quizId: string): Promise<string[]> {
   if (qs.length === 0) return ["Add at least one question."];
   if (quiz?.settings.teamSelection && !normalizeTeamNames(quiz.settings.teamNames ?? []).length)
     problems.push("Add at least one team name or turn off team selection.");
+  if (quiz?.settings.teamEmailVerification) {
+    if (!quiz.settings.teamSelection) problems.push("Turn on team selection to verify team emails.");
+    if (participationMode(quiz.settings) !== "signed_in") problems.push("Email-verified teams require signed-in participation.");
+    if (!oidcEnabled()) problems.push("Configure FOSSClub sign-in before launching an email-rostered quiz.");
+    try {
+      const teamNames = normalizeTeamNames(quiz.settings.teamNames ?? []);
+      const roster = normalizeTeamRoster(quiz.settings.teamRoster ?? [], teamNames, quiz.settings.teamSize ?? 1);
+      const rosteredTeams = new Set(roster.map((member) => member.teamName));
+      if (teamNames.some((name) => !rosteredTeams.has(name)))
+        problems.push("Add at least one rostered email for every team.");
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : "Check the team email roster.");
+    }
+  }
 
   qs.forEach((q, i) => {
     const n = i + 1;
@@ -422,6 +436,7 @@ export async function getPublicSession(code: string) {
     participation: participationMode(settings),
     teams,
     teamSize: settings.teamSelection ? settings.teamSize ?? 1 : null,
+    teamEmailVerification: Boolean(settings.teamSelection && settings.teamEmailVerification),
     powerups: Boolean(quiz?.settings.powerups),
     powerupUses: powerupUses(quiz?.settings),
     powerupTypes: enabledPowerups(quiz?.settings, s.mode),
@@ -484,6 +499,12 @@ export async function joinSession(
     : null;
   if (settings.teamSelection && !teamName)
     throw new HttpError(422, "team_required", "Choose a team from the list");
+  if (settings.teamEmailVerification) {
+    if (mode !== "signed_in" || !userId || !ctx.oidcSubject)
+      throw new HttpError(401, "oidc_required", "Sign in with FOSSClub to join this quiz");
+    if (!input.email || rosterTeamForEmail(settings.teamRoster ?? [], input.email)?.toLowerCase() !== teamName?.toLowerCase())
+      throw new HttpError(422, "team_email_mismatch", "That email is not listed for this team. Check and retry.");
+  }
 
   if (
     s.mode === "live" &&

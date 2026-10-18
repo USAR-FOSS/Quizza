@@ -37,6 +37,7 @@ export const JoinBody = z
   .object({
     nickname: z.string().trim().min(1).max(40),
     teamName: z.string().trim().min(1).max(80).optional(),
+    email: z.email().trim().max(160).optional(),
     avatarColor: colorEnum.optional(),
   })
   .describe("Join a session as a participant");
@@ -95,6 +96,7 @@ export const SessionPublic = z.object({
   participation: participationEnum,
   teams: z.array(z.object({ name: z.string(), joined: z.number().int() })),
   teamSize: z.number().int().nullable(),
+  teamEmailVerification: z.boolean(),
   powerups: z.boolean(),
   powerupUses: z.number().int(),
   powerupTypes: z.array(z.enum(["double", "shield", "safety_net", "attack"])),

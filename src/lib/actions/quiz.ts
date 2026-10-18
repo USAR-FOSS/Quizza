@@ -13,7 +13,7 @@ import {
   requireOptionOwner,
 } from "@/lib/quiz-access";
 import { isMediaUrl, isUploadUrl } from "@/lib/media";
-import { MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames } from "@/lib/teams";
+import { MAX_TEAM_EMAIL_LENGTH, MAX_TEAM_MEMBERS, MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, normalizeTeamRoster } from "@/lib/teams";
 import type {
   OptionRow,
   QuestionType,
@@ -90,6 +90,11 @@ const quizSettingsSchema = z.object({
   teamSelection: z.boolean().optional(),
   teamNames: z.array(z.string().trim().min(1).max(MAX_TEAM_NAME_LENGTH)).max(MAX_TEAM_NAMES).transform(normalizeTeamNames).optional(),
   teamSize: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
+  teamEmailVerification: z.boolean().optional(),
+  teamRoster: z.array(z.object({
+    teamName: z.string().trim().min(1).max(MAX_TEAM_NAME_LENGTH),
+    email: z.email().trim().max(MAX_TEAM_EMAIL_LENGTH),
+  })).max(MAX_TEAM_MEMBERS).optional(),
   coverImage: z.string().max(2048).refine(isMediaUrl).nullable().optional(),
   iconImage: z.string().max(2048).refine(isMediaUrl).nullable().optional(),
   speedBonus: z.boolean().optional(),
@@ -124,14 +129,24 @@ export async function updateQuiz(
   if (data.settings) {
     const [current] = await db.select({ settings: quizzes.settings }).from(quizzes)
       .where(eq(quizzes.id, quizId)).limit(1);
-    if (current && participationMode(current.settings) !== participationMode(data.settings)) {
+    if (data.settings.teamRoster)
+      data.settings.teamRoster = normalizeTeamRoster(data.settings.teamRoster, data.settings.teamNames ?? [], data.settings.teamSize ?? 1);
+    const protectedFieldsChanged = current && (
+      participationMode(current.settings) !== participationMode(data.settings) ||
+      current.settings.teamSelection !== data.settings.teamSelection ||
+      current.settings.teamEmailVerification !== data.settings.teamEmailVerification ||
+      current.settings.teamSize !== data.settings.teamSize ||
+      JSON.stringify(current.settings.teamNames ?? []) !== JSON.stringify(data.settings.teamNames ?? []) ||
+      JSON.stringify(current.settings.teamRoster ?? []) !== JSON.stringify(data.settings.teamRoster ?? [])
+    );
+    if (protectedFieldsChanged) {
       const [open] = await db.select({ id: sessions.id }).from(sessions)
         .where(and(
           eq(sessions.quizId, quizId),
           ne(sessions.status, "ended"),
           or(ne(sessions.mode, "scheduled"), isNull(sessions.closesAt), gt(sessions.closesAt, new Date())),
         )).limit(1);
-      if (open) throw new Error("End the active session before changing who can play.");
+      if (open) throw new Error("End the active session before changing team or participation settings.");
     }
   }
   await db

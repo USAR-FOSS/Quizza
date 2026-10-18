@@ -54,6 +54,8 @@ export type QuizSettings = {
   teamSelection?: boolean;
   teamNames?: string[];
   teamSize?: 1 | 2 | 3 | 4;
+  teamEmailVerification?: boolean;
+  teamRoster?: { teamName: string; email: string }[];
   coverImage?: string | null;
   iconImage?: string | null;
   speedBonus?: boolean;

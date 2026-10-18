@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   currentUser: vi.fn(),
 }));
-vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.currentUser }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.currentUser, oidcEnabled: () => true }));
 vi.mock("@/lib/db", () => {
   const db = {
     query: {
@@ -26,6 +26,7 @@ vi.mock("@/lib/db", () => {
         },
         where: () => chain,
         orderBy: () => chain,
+        groupBy: () => chain,
         limit: () => chain,
         for: () => chain,
         then: (resolve: (rows: unknown[]) => void) =>
@@ -46,7 +47,7 @@ vi.mock("@/lib/realtime/notifications", () => ({
   scheduleAnswerCount: vi.fn(),
   scheduleRoster: vi.fn(),
 }));
-import { submitAnswer, getProgress, getResults, listQuestions } from "./sessions";
+import { submitAnswer, getProgress, getResults, listQuestions, joinSession, getPublicSession } from "./sessions";
 import { signViewToken } from "./view-token";
 
 const question = {
@@ -229,6 +230,52 @@ describe("answer integrity", () => {
     expect(mocks.insert).toHaveBeenCalledWith(
       expect.objectContaining({ points: 1000 }),
     );
+  });
+});
+
+describe("rostered team joins", () => {
+  beforeEach(() => {
+    mocks.rows = {
+      sessions: [{ ...session, status: "lobby" }],
+      participants: [],
+    };
+    mocks.quiz.mockResolvedValue({ settings: {
+      teamSelection: true,
+      teamNames: ["Blue", "Red"],
+      teamSize: 2,
+      teamEmailVerification: true,
+      teamRoster: [{ teamName: "Blue", email: "member@example.org" }],
+      participation: "signed_in",
+    } });
+    mocks.insert.mockClear();
+  });
+
+  it("rejects a listed email for the wrong team before any participant is inserted", async () => {
+    await expect(joinSession("123456", { nickname: "Pat", teamName: "Red", email: "member@example.org" },
+      { userId: "user", deviceId: "device", oidcSubject: "oidc-sub" }))
+      .rejects.toMatchObject({ code: "team_email_mismatch" });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("requires FOSSClub identity for rostered teams", async () => {
+    await expect(joinSession("123456", { nickname: "Pat", teamName: "Blue", email: "member@example.org" },
+      { userId: "password-user", deviceId: "device", oidcSubject: null }))
+      .rejects.toMatchObject({ code: "oidc_required" });
+  });
+
+  it("accepts the listed email for its team without changing the normal join response", async () => {
+    mocks.insert.mockImplementation((values) => ({ returning: async () => [{ id: "joined", ...values }] }));
+    const joined = await joinSession("123456", {
+      nickname: "Pat", teamName: " blue ", email: " MEMBER@EXAMPLE.ORG ",
+    }, { userId: "user", deviceId: "device", oidcSubject: "oidc-sub" });
+    expect(joined).toMatchObject({ id: "joined", teamName: "Blue", nickname: "Pat" });
+    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ teamName: "Blue", userId: "user" }));
+  });
+
+  it("does not expose the private email roster in public session details", async () => {
+    const publicSession = await getPublicSession("123456");
+    expect(publicSession.teamEmailVerification).toBe(true);
+    expect(JSON.stringify(publicSession)).not.toContain("member@example.org");
   });
 });
 
