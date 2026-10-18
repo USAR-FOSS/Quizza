@@ -22,18 +22,25 @@ function parseCsvRows(source: string): string[][] {
   let row: string[] = [];
   let field = "";
   let quoted = false;
+  let closedQuote = false;
   const text = source.replace(/^\uFEFF/, "");
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    if (char === '"') {
-      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
-      else quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      row.push(field); field = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
+    if (quoted) {
+      if (char === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { quoted = false; closedQuote = true; }
+      } else field += char;
+    } else if (char === ",") {
+      row.push(field); field = ""; closedQuote = false;
+    } else if (char === "\n" || char === "\r") {
       row.push(field); rows.push(row); row = []; field = "";
+      closedQuote = false;
       if (char === "\r" && text[i + 1] === "\n") i++;
     } else {
+      if (closedQuote || (char === '"' && field.length > 0))
+        throw new Error("The CSV has invalid quoting. Quote the whole value and escape quotes by doubling them.");
+      if (char === '"') { quoted = true; continue; }
       field += char;
     }
   }

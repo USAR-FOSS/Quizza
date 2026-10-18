@@ -3,15 +3,14 @@ import { redirect } from "next/navigation";
 import { LoadingState } from "@/components/ui/loading-state";
 import { Navbar } from "@/components/site/navbar";
 import { AuthForm } from "@/components/auth/auth-form";
-import { getCurrentUser, oidcEnabled } from "@/lib/auth";
+import { getCurrentUser, oidcEnabled, sanitizeRedirectPath } from "@/lib/auth";
 
 export const metadata = { title: "Sign in - quizza" };
 
 function safeNext(next: string | undefined): string | undefined {
-  // internal paths only, never an open redirect
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")
-    ? next
-    : undefined;
+  if (!next) return undefined;
+  const sanitized = sanitizeRedirectPath(next, "");
+  return sanitized || undefined;
 }
 
 async function Inner({

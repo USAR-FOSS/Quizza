@@ -64,6 +64,20 @@
       "when": 1792307934975,
       "tag": "0008_bright_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792311687650,
+      "tag": "0009_far_terror",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792313058451,
+      "tag": "0010_spicy_human_cannonball",
+      "breakpoints": true
     }
   ]
 }

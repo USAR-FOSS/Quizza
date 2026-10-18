@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes, createHash } from "node:crypto";
-import { oidcEnabled } from "@/lib/auth";
+import { oidcEnabled, sanitizeRedirectPath } from "@/lib/auth";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -21,10 +21,7 @@ export async function GET(req: NextRequest) {
   const challenge = b64url(createHash("sha256").update(verifier).digest());
   const state = b64url(randomBytes(16));
   const nonce = b64url(randomBytes(16));
-  const requestedNext = req.nextUrl.searchParams.get("next") ?? "";
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") && !requestedNext.includes("\\")
-    ? requestedNext
-    : "/dashboard";
+  const next = sanitizeRedirectPath(req.nextUrl.searchParams.get("next"), "/dashboard");
 
   const jar = await cookies();
   const opts = {
