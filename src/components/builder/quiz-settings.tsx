@@ -14,7 +14,7 @@ import {
 import type { QuizSettings } from "@/lib/db/schema-types";
 import { POWERUP_INFO, POWERUP_ORDER, powerupUses } from "@/lib/powerups";
 import { cn } from "@/lib/utils";
-import { MAX_TEAM_MEMBERS, MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, normalizeTeamRoster, parseTeamCsv, parseTeamRosterColumns, parseTeamRosterCsv, searchTeams, type TeamMember } from "@/lib/teams";
+import { MAX_TEAM_MEMBERS, MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, normalizeTeamRoster, parseTeamCsv, parseTeamRosterCsv, searchTeams, type TeamMember } from "@/lib/teams";
 
 export function QuizSettingsPanel({
   settings,
@@ -161,8 +161,7 @@ function TeamSettings({ settings, onChange }: {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
   const [importing, setImporting] = useState(false);
-  const [memberTeams, setMemberTeams] = useState("");
-  const [memberEmails, setMemberEmails] = useState("");
+  const [memberRows, setMemberRows] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
   const names = normalizeTeamNames(settings.teamNames ?? []);
   const visible = searchTeams(names.map((name) => ({ name })), filter, 30);
@@ -212,7 +211,7 @@ function TeamSettings({ settings, onChange }: {
       const nextNames = normalizeTeamNames([...names, ...added.map((member) => member.teamName)]);
       if (nextNames.length > MAX_TEAM_NAMES || nextNames.some((name) => name.length > MAX_TEAM_NAME_LENGTH))
         throw new Error(`Use up to ${MAX_TEAM_NAMES.toLocaleString()} teams with names under ${MAX_TEAM_NAME_LENGTH} characters.`);
-      const nextRoster = normalizeTeamRoster([...roster, ...added], nextNames, settings.teamSize ?? 1);
+      const nextRoster = normalizeTeamRoster([...roster, ...added], nextNames);
       onChange({ teamNames: nextNames, teamRoster: nextRoster });
       setError("");
       return true;
@@ -232,6 +231,7 @@ function TeamSettings({ settings, onChange }: {
   }
 
   return <div className="mt-3 rounded-2xl border border-ink/15 bg-white/60 p-4">
+    {!settings.teamEmailVerification && <>
     <p className="text-sm text-ink-soft">Add team names, then set how many players may join each team.</p>
     <label htmlFor="team-names" className="mt-3 block text-xs font-bold uppercase tracking-wider text-ink-soft">Team names</label>
     <textarea id="team-names" value={draft} onChange={(event) => setDraft(event.target.value)}
@@ -247,6 +247,7 @@ function TeamSettings({ settings, onChange }: {
       }} className="mt-2 block w-full text-sm file:mr-3 file:rounded-xl file:border-2 file:border-ink file:bg-paper file:px-3 file:py-2 file:font-bold disabled:opacity-40" />
     <p className="mt-1 text-xs text-ink-soft">One team per row, or a team/name column. Up to {MAX_TEAM_NAMES.toLocaleString()} teams total.</p>
     {error && <p role="alert" className="mt-2 text-sm text-coral">{error}</p>}
+    </>}
     {names.length > 0 && <div className="mt-4">
       <label htmlFor="team-filter" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Teams ({names.length.toLocaleString()})</label>
       <input id="team-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search teams to remove"
@@ -261,14 +262,12 @@ function TeamSettings({ settings, onChange }: {
         </span>)}</div>
       {names.length > visible.length && <p className="mt-1 text-xs text-ink-soft">Search to see more teams.</p>}
     </div>}
-    <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-soft">Players per team</p>
+    <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-soft">Attempts per team</p>
     <div className="mt-2 grid grid-cols-4 gap-2">{([1, 2, 3, 4] as const).map((size) =>
       <button key={size} type="button" aria-pressed={(settings.teamSize ?? 1) === size}
-        onClick={() => {
-          try { normalizeTeamRoster(roster, names, size); onChange({ teamSize: size }); setError(""); }
-          catch (cause) { setError(cause instanceof Error ? cause.message : "Check the roster size."); }
-        }}
+        onClick={() => { onChange({ teamSize: size }); setError(""); }}
         className={cn("min-h-11 rounded-xl border-2 font-display font-bold transition-colors", (settings.teamSize ?? 1) === size ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}>{size}</button>)}</div>
+    <p className="mt-2 text-xs text-ink-soft">Each player uses one team attempt when joining. Leaving does not reset it.</p>
     {!names.length && <p className="mt-3 text-sm text-coral">Add at least one team before launching.</p>}
 
     <div className="mt-5 border-t border-ink/15 pt-5">
@@ -279,22 +278,18 @@ function TeamSettings({ settings, onChange }: {
         })} />
       {settings.teamEmailVerification && <div className="mt-3 space-y-3">
         <p className="text-xs text-ink-soft">Players sign in with FOSSClub, choose a team, then enter a listed email. This checks the list; it does not prove they own that address.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div><label htmlFor="member-teams" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Team names</label>
-            <textarea id="member-teams" value={memberTeams} onChange={(event) => setMemberTeams(event.target.value)}
-              placeholder={"Blue Birds\nBlue Birds\nRed"} rows={4}
-              className="mt-1 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" /></div>
-          <div><label htmlFor="member-emails" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Emails</label>
-            <textarea id="member-emails" value={memberEmails} onChange={(event) => setMemberEmails(event.target.value)}
-              placeholder={"a@example.org\nb@example.org\nc@example.org"} rows={4}
-              className="mt-1 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" /></div>
-        </div>
-        <button type="button" disabled={!memberTeams.trim() || !memberEmails.trim() || roster.length >= MAX_TEAM_MEMBERS}
+        <label htmlFor="member-rows" className="block text-xs font-bold uppercase tracking-wider text-ink-soft">Team and email list</label>
+        <textarea id="member-rows" value={memberRows} onChange={(event) => setMemberRows(event.target.value)}
+          placeholder={'Blue Birds, alex@example.org\nBlue Birds, sam@example.org\nRed Foxes, lee@example.org'} rows={4}
+          className="w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" />
+        <p className="text-xs text-ink-soft">One member per line: team name, email. Teams are added automatically. List all eligible members; the attempt limit is separate.</p>
+        <button type="button" disabled={!memberRows.trim() || roster.length >= MAX_TEAM_MEMBERS}
           onClick={() => {
             try {
-              if (addMembers(parseTeamRosterColumns(memberTeams, memberEmails))) { setMemberTeams(""); setMemberEmails(""); }
-            } catch (cause) { setError(cause instanceof Error ? cause.message : "Check both columns."); }
+              if (addMembers(parseTeamRosterCsv(`Team Names,Emails\n${memberRows}`))) setMemberRows("");
+            } catch (cause) { setError(cause instanceof Error ? cause.message : "Check each team and email row."); }
           }} className="rounded-xl border-2 border-ink bg-lime px-4 py-2 text-sm font-bold shadow-pop disabled:opacity-40">Add members</button>
+        {error && <p role="alert" className="text-sm text-coral">{error}</p>}
         <div><label htmlFor="team-roster-csv" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Import member CSV</label>
           <input id="team-roster-csv" type="file" accept=".csv,text/csv" disabled={importing || roster.length >= MAX_TEAM_MEMBERS}
             onChange={(event) => { void importRosterCsv(event.target.files?.[0]); event.target.value = ""; }}

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   update: vi.fn(),
   transaction: vi.fn(),
+  teamJoined: 0,
   currentUser: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.currentUser, oidcEnabled: () => true }));
@@ -30,7 +31,7 @@ vi.mock("@/lib/db", () => {
         limit: () => chain,
         for: () => chain,
         then: (resolve: (rows: unknown[]) => void) =>
-          Promise.resolve(selection?.count ? [{ count: (mocks.rows.answers ?? []).filter((row) => Boolean((row as { powerup?: string | null }).powerup)).length }] : (mocks.rows[name] ?? [])).then(resolve),
+          Promise.resolve(selection?.count ? [{ count: name === "participants" ? mocks.teamJoined : (mocks.rows.answers ?? []).filter((row) => Boolean((row as { powerup?: string | null }).powerup)).length }] : (mocks.rows[name] ?? [])).then(resolve),
       };
       return chain;
     },
@@ -234,19 +235,24 @@ describe("answer integrity", () => {
 });
 
 describe("rostered team joins", () => {
+  const teamSettings = {
+    teamSelection: true,
+    teamNames: ["Blue", "Red"],
+    teamSize: 1,
+    teamEmailVerification: true,
+    teamRoster: [
+      { teamName: "Blue", email: "member@example.org" },
+      { teamName: "Blue", email: "teammate@example.org" },
+    ],
+    participation: "signed_in",
+  };
   beforeEach(() => {
+    mocks.teamJoined = 0;
     mocks.rows = {
       sessions: [{ ...session, status: "lobby" }],
       participants: [],
     };
-    mocks.quiz.mockResolvedValue({ settings: {
-      teamSelection: true,
-      teamNames: ["Blue", "Red"],
-      teamSize: 2,
-      teamEmailVerification: true,
-      teamRoster: [{ teamName: "Blue", email: "member@example.org" }],
-      participation: "signed_in",
-    } });
+    mocks.quiz.mockResolvedValue({ settings: teamSettings });
     mocks.insert.mockClear();
   });
 
@@ -277,6 +283,31 @@ describe("rostered team joins", () => {
     await expect(joinSession("123456", { nickname: "Pat", teamName: "Blue", email: "member@example.org" },
       { userId: "another-user", deviceId: "another-device", oidcSubject: "oidc-sub" }))
       .rejects.toMatchObject({ code: "team_email_used" });
+  });
+
+  it.each([["live", 1], ["live", 3], ["scheduled", 1], ["scheduled", 3]] as const)("enforces the shared %s quiz quota of %i attempts", async (mode, limit) => {
+    mocks.quiz.mockResolvedValue({ settings: { ...teamSettings, teamSize: limit } });
+    mocks.teamJoined = limit - 1;
+    mocks.rows.sessions = [{ ...session, mode, status: mode === "live" ? "lobby" : "active", closesAt: new Date(Date.now() + 60_000) }];
+    mocks.insert.mockImplementation((values) => ({ returning: async () => [{ id: "joined", ...values }] }));
+    await expect(joinSession("123456", { nickname: "Teammate", teamName: "Blue", email: "teammate@example.org" },
+      { userId: "teammate", deviceId: "device", oidcSubject: "oidc-sub" }))
+      .resolves.toMatchObject({ id: "joined", teamName: "Blue" });
+    mocks.teamJoined = limit;
+    mocks.insert.mockClear();
+    await expect(joinSession("123456", { nickname: "Pat", teamName: "Blue", email: "member@example.org" },
+      { userId: "another-user", deviceId: "another-device", oidcSubject: "another-sub" }))
+      .rejects.toMatchObject({ code: "team_full", message: `Blue has already used all ${limit} allowed ${limit === 1 ? "attempt" : "attempts"} for this quiz.` });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("resumes the existing account's attempt when the team quota is already used", async () => {
+    mocks.teamJoined = 1;
+    mocks.rows.participants = [{ id: "existing", userId: "user", teamName: "Blue", nickname: "Pat" }];
+    await expect(joinSession("123456", { nickname: "Pat", teamName: "Blue", email: "member@example.org" },
+      { userId: "user", deviceId: "device", oidcSubject: "oidc-sub" }))
+      .resolves.toMatchObject({ id: "existing", teamName: "Blue" });
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("does not expose the private email roster in public session details", async () => {

@@ -230,7 +230,7 @@ These are validated in the application (zod and TypeScript in
 | allowLateJoin | boolean | Permit joining after start (live). |
 | teamSelection | boolean | Require a team choice when joining. |
 | teamNames | string[] | Available teams, deduplicated without case sensitivity. |
-| teamSize | integer | Maximum participants per team, 1–4. |
+| teamSize | integer | Allowed attempts per team per session, 1–4. Joining claims one permanently; eligible roster emails may exceed this limit. |
 | teamEmailVerification | boolean | Require a matching team-roster email at join time. This checks a typed address, not ownership of the mailbox. |
 | teamRoster | `{ teamName: string; email: string }[]` | Host-only team/email pairs used to validate joins. |
 

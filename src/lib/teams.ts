@@ -86,11 +86,10 @@ export function parseTeamRosterCsv(source: string): TeamMember[] {
   });
 }
 
-export function normalizeTeamRoster(rows: TeamMember[], teamNames: string[], teamSize: number): TeamMember[] {
+export function normalizeTeamRoster(rows: TeamMember[], teamNames: string[]): TeamMember[] {
   if (rows.length > MAX_TEAM_MEMBERS) throw new Error(`A quiz can have up to ${MAX_TEAM_MEMBERS.toLocaleString()} rostered members.`);
   const teamLookup = new Map(normalizeTeamNames(teamNames).map((name) => [name.toLowerCase(), name]));
   const byEmail = new Map<string, string>();
-  const counts = new Map<string, number>();
   const normalized: TeamMember[] = [];
   for (const row of rows) {
     const teamName = teamLookup.get(row.teamName.trim().replace(/\s+/g, " ").toLowerCase());
@@ -104,9 +103,6 @@ export function normalizeTeamRoster(rows: TeamMember[], teamNames: string[], tea
         throw new Error(`${email} is assigned to more than one team.`);
       continue;
     }
-    const count = (counts.get(teamName) ?? 0) + 1;
-    if (count > teamSize) throw new Error(`${teamName} has more than ${teamSize} rostered members.`);
-    counts.set(teamName, count);
     byEmail.set(email, teamName);
     normalized.push({ teamName, email });
   }

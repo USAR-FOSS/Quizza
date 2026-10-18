@@ -130,7 +130,7 @@ export async function updateQuiz(
     const [current] = await db.select({ settings: quizzes.settings }).from(quizzes)
       .where(eq(quizzes.id, quizId)).limit(1);
     if (data.settings.teamRoster)
-      data.settings.teamRoster = normalizeTeamRoster(data.settings.teamRoster, data.settings.teamNames ?? [], data.settings.teamSize ?? 1);
+      data.settings.teamRoster = normalizeTeamRoster(data.settings.teamRoster, data.settings.teamNames ?? []);
     const protectedFieldsChanged = current && (
       participationMode(current.settings) !== participationMode(data.settings) ||
       current.settings.teamSelection !== data.settings.teamSelection ||

@@ -42,7 +42,7 @@ export function TeamPicker({ teams, teamSize, value, onChange }: {
         return <button key={team.name} type="button" role="option" aria-selected={value === team.name}
           disabled={full} onClick={() => { onChange(team.name); setOpen(false); }}
           className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-lime/40 disabled:cursor-not-allowed disabled:opacity-45", value === team.name && "bg-lime/50")}>
-          <span className="truncate">{team.name}</span><span className="ml-3 shrink-0 text-xs text-ink-soft">{full ? "Full" : `${team.joined}/${teamSize}`}</span>
+          <span className="truncate">{team.name}</span><span className="ml-3 shrink-0 text-xs text-ink-soft">{full ? (teamSize === 1 ? "Already played" : "Attempts used") : `${team.joined}/${teamSize} used`}</span>
         </button>;
       })}
       {!matches.length && <p className="px-3 py-2 text-sm text-ink-soft">No matching teams</p>}
