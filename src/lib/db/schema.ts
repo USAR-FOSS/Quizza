@@ -199,6 +199,7 @@ export const participants = pgTable(
       .notNull(),
     nickname: text("nickname").notNull(),
     teamName: text("team_name"),
+    rosterEmail: text("roster_email"),
     // palette key for the colored monogram avatar (derived from nickname).
     avatarColor: text("avatar_color").default("grape").notNull(),
     avatarUrl: text("avatar_url"),
@@ -228,6 +229,9 @@ export const participants = pgTable(
     uniqueIndex("participants_session_device_key")
       .on(t.sessionId, t.deviceId)
       .where(sql`${t.deviceId} is not null`),
+    uniqueIndex("participants_session_roster_email_key")
+      .on(t.sessionId, t.rosterEmail)
+      .where(sql`${t.rosterEmail} is not null`),
   ],
 );
 

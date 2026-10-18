@@ -505,6 +505,7 @@ export async function joinSession(
     if (!input.email || rosterTeamForEmail(settings.teamRoster ?? [], input.email)?.toLowerCase() !== teamName?.toLowerCase())
       throw new HttpError(422, "team_email_mismatch", "That email is not listed for this team. Check and retry.");
   }
+  const rosterEmail = settings.teamEmailVerification ? input.email!.trim().toLowerCase() : null;
 
   if (
     s.mode === "live" &&
@@ -521,7 +522,7 @@ export async function joinSession(
   const clientToken = generateToken();
   const avatarColor = input.avatarColor ?? colorFor(input.nickname);
   try {
-    const values = { sessionId: s.id, nickname: input.nickname, teamName, avatarColor, clientToken, userId, deviceId };
+    const values = { sessionId: s.id, nickname: input.nickname, teamName, rosterEmail, avatarColor, clientToken, userId, deviceId };
     const p = teamName ? await db.transaction(async (tx) => {
       // Serializes joins for this room, including joins handled by other instances.
       await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, s.id)).for("update");
@@ -531,6 +532,11 @@ export async function joinSession(
         const [existing] = await tx.select().from(participants)
           .where(and(eq(participants.sessionId, s.id), identity)).limit(1);
         if (existing) return existing;
+      }
+      if (rosterEmail) {
+        const [claimed] = await tx.select({ id: participants.id }).from(participants)
+          .where(and(eq(participants.sessionId, s.id), eq(participants.rosterEmail, rosterEmail))).limit(1);
+        if (claimed) throw new HttpError(409, "team_email_used", "That email has already been used for this quiz.");
       }
       const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(participants)
         .where(and(eq(participants.sessionId, s.id), eq(participants.teamName, teamName)));
@@ -547,6 +553,8 @@ export async function joinSession(
       const existing = await findExistingParticipant(s.id, userId, deviceId);
       if (existing) return participantView(existing);
     }
+    if (isUniqueViolation(err) && rosterEmail)
+      throw new HttpError(409, "team_email_used", "That email has already been used for this quiz.");
     throw err;
   }
 }

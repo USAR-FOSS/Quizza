@@ -269,7 +269,14 @@ describe("rostered team joins", () => {
       nickname: "Pat", teamName: " blue ", email: " MEMBER@EXAMPLE.ORG ",
     }, { userId: "user", deviceId: "device", oidcSubject: "oidc-sub" });
     expect(joined).toMatchObject({ id: "joined", teamName: "Blue", nickname: "Pat" });
-    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ teamName: "Blue", userId: "user" }));
+    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ teamName: "Blue", userId: "user", rosterEmail: "member@example.org" }));
+  });
+
+  it("rejects a second claim of the same roster email across instances", async () => {
+    mocks.insert.mockImplementation(() => ({ returning: async () => { throw { code: "23505" }; } }));
+    await expect(joinSession("123456", { nickname: "Pat", teamName: "Blue", email: "member@example.org" },
+      { userId: "another-user", deviceId: "another-device", oidcSubject: "oidc-sub" }))
+      .rejects.toMatchObject({ code: "team_email_used" });
   });
 
   it("does not expose the private email roster in public session details", async () => {

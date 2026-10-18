@@ -173,7 +173,7 @@ while live and reusable after a run ends.
 
 ### participants
 
-A person in a session. Anonymous by default.
+A person in a session. Identity requirements depend on the quiz settings.
 
 | Column | Type | Null | Default | Notes |
 |--------|------|------|---------|-------|
@@ -181,13 +181,16 @@ A person in a session. Anonymous by default.
 | session_id | uuid | no | | FK `sessions.id` ON DELETE CASCADE |
 | nickname | text | no | | Chosen display name. |
 | team_name | text | yes | | Chosen team, nullable for individual quizzes. |
+| roster_email | text | yes | | Lowercased email claimed from the team roster, only for roster-protected sessions. |
 | avatar_color | text | no | `'grape'` | Palette key; monogram avatar. |
 | score | integer | no | `0` | Running total, updated on scored answers. |
 | client_token | text | no | | Secret for reconnect and answer submission. |
 | joined_at | timestamptz | no | `now()` | |
 
 Indexes: `participants_session_idx (session_id)`; unique
-`participants_session_client_key (session_id, client_token)`.
+`participants_session_client_key (session_id, client_token)`; partial unique
+`participants_session_roster_email_key (session_id, roster_email) WHERE roster_email IS NOT NULL`
+so a roster email can be claimed only once per session.
 
 ### answers
 
@@ -228,6 +231,8 @@ These are validated in the application (zod and TypeScript in
 | teamSelection | boolean | Require a team choice when joining. |
 | teamNames | string[] | Available teams, deduplicated without case sensitivity. |
 | teamSize | integer | Maximum participants per team, 1–4. |
+| teamEmailVerification | boolean | Require a matching team-roster email at join time. This checks a typed address, not ownership of the mailbox. |
+| teamRoster | `{ teamName: string; email: string }[]` | Host-only team/email pairs used to validate joins. |
 
 ### QuestionSettings (`questions.settings`)
 

@@ -49,7 +49,7 @@ function header(value: string): string {
 export function parseTeamCsv(source: string): string[] {
   const rows = parseCsvRows(source);
   const headers = rows[0]?.map(header) ?? [];
-  const column = headers.findIndex((value) => ["team", "team name", "name"].includes(value));
+  const column = headers.findIndex((value) => ["team", "team name", "team names", "name"].includes(value));
   const index = column < 0 ? 0 : column;
   return normalizeTeamNames(rows.slice(column < 0 ? 0 : 1).map((cells) => cells[index] ?? ""));
 }

@@ -25,10 +25,11 @@ entries. Team and roster changes are blocked while a session is open.
 At join, players sign in with FOSSClub, select a team, and type a listed email.
 The server checks the email against that team before creating a participant.
 The roster stays in host-only quiz settings and is never included in public
-session details. No database migration is needed: the roster is stored in the
-existing quiz settings JSON.
+session details. Migration 0008 adds a nullable participant email and a unique
+per-session index, so the same listed email cannot be claimed twice. Existing
+participants remain unchanged. The full roster is stored in quiz settings JSON.
 
 This is a **roster lookup, not proof of email ownership**. Someone with a
-FOSSClub account who knows another member's listed address can claim it. Use
-an email one-time-code flow if ownership proof becomes necessary. Existing
+FOSSClub account who knows another member's listed address can claim it first.
+Use an email one-time-code flow if ownership proof becomes necessary. Existing
 account-level one-attempt protection still applies to rostered quizzes.

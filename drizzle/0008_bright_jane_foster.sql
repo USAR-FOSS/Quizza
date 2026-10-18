@@ -1,0 +1,2 @@
+ALTER TABLE "participants" ADD COLUMN "roster_email" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "participants_session_roster_email_key" ON "participants" USING btree ("session_id","roster_email") WHERE "participants"."roster_email" is not null;
