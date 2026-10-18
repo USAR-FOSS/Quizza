@@ -8,10 +8,10 @@ import {
 } from "@/lib/quiz-policy";
 
 describe("policy defaults", () => {
-  it("defaults to per_question reveal, at_end leaderboard, anonymous", () => {
+  it("defaults to per_question reveal, at_end leaderboard, one per device", () => {
     expect(revealPolicy({})).toBe("per_question");
     expect(leaderboardPolicy({})).toBe("at_end");
-    expect(participationMode({})).toBe("anonymous");
+    expect(participationMode({})).toBe("one_per_device");
   });
 });
 

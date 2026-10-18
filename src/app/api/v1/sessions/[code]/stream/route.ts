@@ -5,6 +5,7 @@ import { resolveSession, getParticipantByToken } from "@/lib/sessions";
 import { onRedisSubscriberReconnect, usesRedisRealtime } from "@/lib/redis/client";
 import { scheduleRoster, scheduleRosterBatch } from "@/lib/realtime/notifications";
 import { refreshPresence } from "@/lib/realtime/presence";
+import { HttpError } from "@/lib/api/http";
 
 type Ctx = { params: Promise<{ code: string }> };
 
@@ -20,9 +21,16 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const session = await resolveSession(code);
   if (!session) return new Response("Session not found", { status: 404 });
 
-  const participant = playerToken
-    ? await getParticipantByToken(session.id, playerToken)
-    : null;
+  let participant = null;
+  try {
+    participant = playerToken
+      ? await getParticipantByToken(session.id, playerToken)
+      : null;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401)
+      return new Response("Unauthorized", { status: 401 });
+    throw error;
+  }
   let role: "host" | "player";
   if (hostToken && hostToken === session.hostToken) {
     role = "host";

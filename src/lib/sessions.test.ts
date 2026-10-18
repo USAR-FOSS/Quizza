@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   update: vi.fn(),
   transaction: vi.fn(),
+  currentUser: vi.fn(),
 }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.currentUser }));
 vi.mock("@/lib/db", () => {
   const db = {
     query: {
@@ -85,6 +87,15 @@ describe("answer integrity", () => {
     mocks.quiz.mockResolvedValue({ settings: {} });
     mocks.insert.mockClear().mockResolvedValue(undefined);
     mocks.update.mockClear().mockResolvedValue(undefined);
+    mocks.currentUser.mockReset().mockResolvedValue(null);
+  });
+  it("does not resume a signed-in attempt after logout or account switch", async () => {
+    mocks.rows.participants = [{ id: "player", userId: "owner" }];
+    await expect(getProgress("123456", "token")).rejects.toMatchObject({ code: "signin_required" });
+    mocks.currentUser.mockResolvedValue({ id: "someone-else" });
+    await expect(getProgress("123456", "token")).rejects.toMatchObject({ code: "signin_required" });
+    mocks.currentUser.mockResolvedValue({ id: "owner" });
+    await expect(getProgress("123456", "token")).resolves.toMatchObject({ answered: [] });
   });
   it("rejects answers after the host reveals", async () => {
     mocks.rows.sessions = [{ ...session, revealed: true }];

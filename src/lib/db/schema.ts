@@ -187,7 +187,7 @@ export const sessions = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
- *  participants - people in a session (anonymous by default)
+ *  participants - people in a session (one per device by default)
  * ------------------------------------------------------------------ */
 
 export const participants = pgTable(
@@ -198,6 +198,7 @@ export const participants = pgTable(
       .references(() => sessions.id, { onDelete: "cascade" })
       .notNull(),
     nickname: text("nickname").notNull(),
+    teamName: text("team_name"),
     // palette key for the colored monogram avatar (derived from nickname).
     avatarColor: text("avatar_color").default("grape").notNull(),
     avatarUrl: text("avatar_url"),

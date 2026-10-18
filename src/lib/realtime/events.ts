@@ -28,6 +28,7 @@ export interface LiveQuestion {
 export interface LiveLeaderboardEntry {
   participantId: string;
   nickname: string;
+  teamName?: string | null;
   avatarColor: string;
   avatarUrl?: string | null;
   score: number;

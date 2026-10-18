@@ -119,10 +119,12 @@ The PRD calls out cheat prevention as desirable. Vectors and responses:
 - Timing manipulation in scheduled mode: `elapsedMs` is clamped now; a
   server-issued, signed per-question view token with a server timestamp would
   make response time authoritative (Planned).
-- Multiple identities: an anonymous participant can rejoin under a new nickname.
-  For graded assessments, an OIDC-required participation mode ties one attempt to
-  one identity (Planned). Per-session participant caps and rate limits reduce
-  casual abuse.
+- Multiple identities: an explicitly anonymous participant can rejoin under a
+  new nickname. One-per-device (the default) blocks another attempt while its
+  cookie persists, but a cleared cookie or another device bypasses it.
+  Signed-in mode binds a saved player token to the original account and is the
+  strongest available one-attempt policy; a person can still create another
+  account. Per-session rate limits reduce casual abuse.
 - Collusion and out-of-band sharing: partially mitigated by per-question timers,
   option shuffling (`shuffleOptions`), and question shuffling
   (`shuffleQuestions`). Not fully solvable; documented as accepted residual risk

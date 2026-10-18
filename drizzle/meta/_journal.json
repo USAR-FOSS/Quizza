@@ -50,6 +50,13 @@
       "when": 1792230421028,
       "tag": "0006_motionless_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792301981932,
+      "tag": "0007_left_scarecrow",
+      "breakpoints": true
     }
   ]
 }

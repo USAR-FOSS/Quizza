@@ -102,7 +102,7 @@ const routes: RouteDef[] = [
     tags: ["Results"],
     summary: "Download all answers as CSV",
     description:
-      "Owner's host token required as a Bearer credential. Downloads a CSV with nickname, score, question, answer, correctness, response time, and points. User-authored spreadsheet formulas are escaped.",
+      "Owner's host token required as a Bearer credential. Downloads a CSV with nickname, team, score, question, answer, correctness, response time, and points. User-authored spreadsheet formulas are escaped.",
     parameters: [
       { name: "code", in: "path", required: true },
       {
@@ -152,7 +152,7 @@ const routes: RouteDef[] = [
     tags: ["Participants"],
     summary: "Join a session",
     description:
-      "Joins anonymously with a nickname. Returns a clientToken used to submit answers and reconnect.",
+      "Joins with a nickname and, when enabled, a teamName from the session's team list. The server enforces the team capacity. Signed-in quizzes also require an account. Returns a clientToken used to submit answers and reconnect.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
     ],
@@ -160,7 +160,7 @@ const routes: RouteDef[] = [
     responses: {
       "201": { description: "Joined", schema: "Participant" },
       "404": { description: "Session not found", schema: "ApiError" },
-      "409": { description: "Session is not open to join", schema: "ApiError" },
+      "409": { description: "Session is not open or the team is full", schema: "ApiError" },
       "422": { description: "Validation error", schema: "ApiError" },
     },
   },

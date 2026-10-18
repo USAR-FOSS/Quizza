@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm db:migrate && next dev",
+    "build": "node scripts/vercel-build.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -12,7 +12,7 @@
     "test:load:live": "k6 run scripts/load/live.js",
     "test:integration:realtime": "node scripts/integration/two-instance.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node --env-file=.env.local src/lib/db/migrate.ts",
+    "db:migrate": "node src/lib/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

@@ -29,15 +29,10 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { AvatarChoice } from "@/components/ui/avatar-choice";
 import { uploadImage } from "@/lib/upload-client";
 import { QuizCover, RoomTheme } from "./room-theme";
+import { TeamPicker } from "./team-picker";
+import { restorePlayerIdentity, savePlayerIdentity, type PlayerIdentity } from "@/lib/player-identity";
 
-type Identity = {
-  clientToken: string;
-  participantId: string;
-  nickname: string;
-  avatarColor: string;
-  avatarUrl?: string | null;
-  photoWarning?: string;
-};
+type Identity = PlayerIdentity;
 
 type Phase =
   | "loading"
@@ -50,8 +45,6 @@ type Phase =
   | "question"
   | "feedback"
   | "done";
-
-const storeKey = (code: string) => `quizza:player:${code}`;
 
 export function Player({ code }: { code: string }) {
   const [phase, setPhase] = useState<Phase>("loading");
@@ -86,8 +79,8 @@ export function Player({ code }: { code: string }) {
           setLive(true);
           return;
         }
-        const stored = localStorage.getItem(storeKey(code));
-        const identity: Identity | null = stored ? JSON.parse(stored) : null;
+        const identity = await restorePlayerIdentity(code, s.id);
+        if (!alive) return;
         if (identity) {
           setMe(identity);
           if (s.status === "ended") {
@@ -157,16 +150,19 @@ export function Player({ code }: { code: string }) {
     nickname: string,
     avatarColor: string,
     photo: File | null,
+    teamName?: string,
   ) {
     try {
-      const p = await api.join(code, { nickname, avatarColor });
+      const p = await api.join(code, { nickname, avatarColor, teamName });
       const identity: Identity = {
         clientToken: p.clientToken,
         participantId: p.id,
         nickname: p.nickname,
+        teamName: p.teamName,
         avatarColor: p.avatarColor,
         avatarUrl: p.avatarUrl,
       };
+      if (session) savePlayerIdentity(session.id, identity);
       if (photo) {
         try {
           identity.avatarUrl = await uploadImage(photo, {
@@ -177,7 +173,7 @@ export function Player({ code }: { code: string }) {
           identity.photoWarning = `You joined, but your photo wasn’t uploaded: ${err instanceof Error ? err.message : "Please try a smaller image next time."}`;
         }
       }
-      localStorage.setItem(storeKey(code), JSON.stringify(identity));
+      if (session) savePlayerIdentity(session.id, identity);
       setMe(identity);
       await loadQuestions(identity.clientToken);
     } catch (err) {
@@ -189,6 +185,8 @@ export function Player({ code }: { code: string }) {
       ) {
         setPhase("closed");
       } else {
+        if (err instanceof ApiClientError && err.code === "team_full")
+          setSession(await api.getSession(code));
         throw err;
       }
     }
@@ -347,7 +345,7 @@ export function Player({ code }: { code: string }) {
           )}
 
           {phase === "join" && (
-            <JoinCard key="join" code={code} quiz={session?.quiz} onJoin={handleJoin} />
+            <JoinCard key="join" code={code} session={session} onJoin={handleJoin} />
           )}
 
           {phase === "intro" && session && (
@@ -472,15 +470,16 @@ function Message({
 
 function JoinCard({
   code,
-  quiz,
+  session,
   onJoin,
 }: {
   code: string;
-  quiz?: SessionPublic["quiz"];
+  session: SessionPublic | null;
   onJoin: (
     nickname: string,
     color: string,
     photo: File | null,
+    teamName?: string,
   ) => Promise<void>;
 }) {
   const [nickname, setNickname] = useState("");
@@ -488,15 +487,19 @@ function JoinCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [teamName, setTeamName] = useState("");
+  const teams = session?.teams ?? [];
+  const requiresTeam = session?.teamSize != null;
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
-    if (!nickname.trim() || busy) return;
+    if (!nickname.trim() || (requiresTeam && !teamName) || busy) return;
     setBusy(true);
     setError("");
     try {
-      await onJoin(nickname.trim(), color, photo);
+      await onJoin(nickname.trim(), color, photo, teamName || undefined);
     } catch (err) {
+      if (err instanceof ApiClientError && ["team_full", "team_required"].includes(err.code)) setTeamName("");
       setError(
         err instanceof Error ? err.message : "Couldn’t join. Please try again.",
       );
@@ -513,7 +516,7 @@ function JoinCard({
       exit={{ opacity: 0 }}
       className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-7 shadow-pop-lg"
     >
-      {quiz && <QuizCover quiz={quiz} />}
+      {session && <QuizCover quiz={session.quiz} />}
       <p className="mb-2 text-xs font-bold uppercase tracking-widest text-grape">
         Scheduled · play at your pace
       </p>
@@ -557,9 +560,10 @@ function JoinCard({
         file={photo}
         onChange={setPhoto}
       />
+      {requiresTeam && <TeamPicker teams={teams} teamSize={session?.teamSize ?? 1} value={teamName} onChange={setTeamName} />}
       <button
         type="submit"
-        disabled={!nickname.trim() || busy}
+        disabled={!nickname.trim() || (requiresTeam && !teamName) || busy}
         className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-ink bg-grape font-display text-lg font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50"
       >
         {busy ? "Getting you ready…" : "Get started"}

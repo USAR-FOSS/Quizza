@@ -51,6 +51,9 @@ export type ParticipationMode = "anonymous" | "one_per_device" | "signed_in";
 export type Powerup = "double" | "shield" | "safety_net" | "attack";
 
 export type QuizSettings = {
+  teamSelection?: boolean;
+  teamNames?: string[];
+  teamSize?: 1 | 2 | 3 | 4;
   coverImage?: string | null;
   iconImage?: string | null;
   speedBonus?: boolean;
@@ -65,7 +68,7 @@ export type QuizSettings = {
   // when the scored leaderboard is shown to players
   leaderboard?: LeaderboardPolicy; // default "at_end"
   // who may join and whether replay is prevented
-  participation?: ParticipationMode; // default "anonymous"
+  participation?: ParticipationMode; // default "one_per_device"
 };
 
 export type QuizRow = {

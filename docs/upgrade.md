@@ -2,7 +2,9 @@
 
 ## Deploying
 
-Run `pnpm db:migrate` before deploying the updated application. Migration 0003
+`pnpm dev` and Vercel Production builds apply pending migrations automatically.
+Other deployment targets should run `pnpm db:migrate` before starting the updated
+application. Migration 0003
 adds `question_views` and `answers.powerup`, with unique indexes for first views
 and once-per-run powerups. Existing quizzes keep powerups disabled. Existing
 answer and scoring records remain intact.
@@ -19,10 +21,30 @@ preserved; existing quizzes with powerups enabled default to one shared charge.
 The subsequent shared-charge, scheduled-results, and media UI fixes add no
 further database migration.
 
+Migration 0007 adds nullable `participants.team_name` for team selection.
+Apply it before deploying the team picker. Existing participants remain
+unassigned. Team names and the 1–4 player limit live in quiz settings; the
+join endpoint validates the choice and checks capacity under a database lock.
+
+Participation now defaults to one attempt per device when a quiz has no explicit
+policy. Quizzes explicitly set to anonymous still allow retries; choose
+"Signed in, one try" when account-level replay protection matters. A device
+cookie is best-effort and can be cleared. Existing anonymous participants do
+not gain a device binding retroactively, so end and relaunch any in-progress
+quiz that needs the stricter policy. The participation setting cannot change
+while a session is open. Player identities are stored per session ID and
+validated against the server before resume, so a reused join code cannot
+restore an earlier session's attempt.
+
 Set `AUTH_SECRET` in production. The application no longer signs authentication
 or view tokens using a development fallback in production.
 
 ## API changes
+
+- Team-enabled sessions expose `teams` with current occupancy and `teamSize`.
+  `POST /sessions/{code}/participants` requires `teamName` from that list.
+  A full team returns `409 team_full`; results and CSV export include the
+  assigned team. Existing quizzes remain individual by default.
 
 - `GET /sessions/{code}/questions/{questionId}/view` returns `viewToken` and
   `startedAt`. It persists the first view; subsequent requests return the same

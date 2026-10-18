@@ -32,6 +32,8 @@ import { signViewToken, verifyViewToken } from "@/lib/view-token";
 import { isClean } from "@/lib/moderation";
 import { csvField } from "@/lib/csv";
 import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
+import { matchingTeamName, normalizeTeamNames } from "@/lib/teams";
+import { getCurrentUser } from "@/lib/auth";
 import type { z } from "zod";
 import type { QuizSettings } from "@/lib/db/schema-types";
 import type {
@@ -75,6 +77,8 @@ export async function validateQuizForLaunch(quizId: string): Promise<string[]> {
   const problems: string[] = [];
   const qs = quiz?.questions ?? [];
   if (qs.length === 0) return ["Add at least one question."];
+  if (quiz?.settings.teamSelection && !normalizeTeamNames(quiz.settings.teamNames ?? []).length)
+    problems.push("Add at least one team name or turn off team selection.");
 
   qs.forEach((q, i) => {
     const n = i + 1;
@@ -259,6 +263,10 @@ async function getParticipant(sessionId: string, clientToken: string) {
       ),
     )
     .limit(1);
+  // A saved player token is not a substitute for the signed-in account. In
+  // particular, logging out or switching accounts must not resume that attempt.
+  if (p?.userId && (await getCurrentUser())?.id !== p.userId)
+    throw new HttpError(401, "signin_required", "Sign in with the account that joined this quiz");
   return p;
 }
 
@@ -391,10 +399,17 @@ export async function getPublicSession(code: string) {
     where: eq(quizzes.id, s.quizId),
     columns: { title: true, coverIcon: true, theme: true, settings: true },
   });
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  const teamCounts = await db
+    .select({ teamName: participants.teamName, count: sql<number>`count(*)::int` })
     .from(participants)
-    .where(eq(participants.sessionId, s.id));
+    .where(eq(participants.sessionId, s.id))
+    .groupBy(participants.teamName);
+  const count = teamCounts.reduce((total, row) => total + row.count, 0);
+  const settings = (quiz?.settings as QuizSettings) ?? {};
+  const teams = settings.teamSelection ? normalizeTeamNames(settings.teamNames ?? []).map((name) => ({
+    name,
+    joined: teamCounts.find((row) => row.teamName === name)?.count ?? 0,
+  })) : [];
 
   return {
     id: s.id,
@@ -404,7 +419,9 @@ export async function getPublicSession(code: string) {
     opensAt: iso(s.opensAt),
     closesAt: iso(s.closesAt),
     participantCount: count,
-    participation: participationMode((quiz?.settings as QuizSettings) ?? {}),
+    participation: participationMode(settings),
+    teams,
+    teamSize: settings.teamSelection ? settings.teamSize ?? 1 : null,
     powerups: Boolean(quiz?.settings.powerups),
     powerupUses: powerupUses(quiz?.settings),
     powerupTypes: enabledPowerups(quiz?.settings, s.mode),
@@ -462,6 +479,12 @@ export async function joinSession(
     if (existing) return participantView(existing);
   }
 
+  const teamName = settings.teamSelection
+    ? matchingTeamName(settings.teamNames ?? [], input.teamName ?? "")
+    : null;
+  if (settings.teamSelection && !teamName)
+    throw new HttpError(422, "team_required", "Choose a team from the list");
+
   if (
     s.mode === "live" &&
     s.status === "active" &&
@@ -477,17 +500,24 @@ export async function joinSession(
   const clientToken = generateToken();
   const avatarColor = input.avatarColor ?? colorFor(input.nickname);
   try {
-    const [p] = await db
-      .insert(participants)
-      .values({
-        sessionId: s.id,
-        nickname: input.nickname,
-        avatarColor,
-        clientToken,
-        userId,
-        deviceId,
-      })
-      .returning();
+    const values = { sessionId: s.id, nickname: input.nickname, teamName, avatarColor, clientToken, userId, deviceId };
+    const p = teamName ? await db.transaction(async (tx) => {
+      // Serializes joins for this room, including joins handled by other instances.
+      await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, s.id)).for("update");
+      const identity = userId ? eq(participants.userId, userId)
+        : deviceId ? eq(participants.deviceId, deviceId) : null;
+      if (identity) {
+        const [existing] = await tx.select().from(participants)
+          .where(and(eq(participants.sessionId, s.id), identity)).limit(1);
+        if (existing) return existing;
+      }
+      const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(participants)
+        .where(and(eq(participants.sessionId, s.id), eq(participants.teamName, teamName)));
+      if (count >= (settings.teamSize ?? 1))
+        throw new HttpError(409, "team_full", `${teamName} is full. Choose another team.`);
+      const [joined] = await tx.insert(participants).values(values).returning();
+      return joined;
+    }) : (await db.insert(participants).values(values).returning())[0];
     if (s.mode === "live") scheduleRoster(s.id, p.id, true);
     return participantView(p);
   } catch (err) {
@@ -504,6 +534,7 @@ function participantView(p: typeof participants.$inferSelect) {
   return {
     id: p.id,
     nickname: p.nickname,
+    teamName: p.teamName,
     avatarColor: p.avatarColor,
     avatarUrl: p.avatarUrl,
     clientToken: p.clientToken,
@@ -1015,6 +1046,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
     ? parts.map((p, i) => ({
         participantId: p.id,
         nickname: p.nickname,
+        teamName: p.teamName,
         avatarColor: p.avatarColor,
         avatarUrl: p.avatarUrl,
         score: p.score,
@@ -1118,6 +1150,7 @@ export async function exportCsv(
 
   const header = [
     "nickname",
+    "team",
     "score",
     "question",
     "answer",
@@ -1137,6 +1170,7 @@ export async function exportCsv(
     rows.push(
       [
         csvField(p?.nickname),
+        csvField(p?.teamName),
         csvField(p?.score),
         csvField(q?.prompt),
         csvField(answerText),

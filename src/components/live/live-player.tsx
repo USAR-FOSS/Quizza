@@ -32,17 +32,10 @@ import { AvatarChoice } from "@/components/ui/avatar-choice";
 import { uploadImage } from "@/lib/upload-client";
 import { LobbyCrowd } from "./lobby-crowd";
 import { QuizCover, RoomTheme } from "./room-theme";
+import { TeamPicker } from "./team-picker";
+import { restorePlayerIdentity, savePlayerIdentity, type PlayerIdentity } from "@/lib/player-identity";
 
-type Identity = {
-  clientToken: string;
-  participantId: string;
-  nickname: string;
-  avatarColor: string;
-  avatarUrl?: string | null;
-  photoWarning?: string;
-};
-
-const storeKey = (code: string) => `quizza:player:${code}`;
+type Identity = PlayerIdentity;
 
 export function LivePlayer({ code }: { code: string }) {
   const [session, setSession] = useState<SessionPublic | null>(null);
@@ -57,8 +50,8 @@ export function LivePlayer({ code }: { code: string }) {
         const s = await api.getSession(code);
         if (!alive) return;
         setSession(s);
-        const stored = localStorage.getItem(storeKey(code));
-        if (stored) setMe(JSON.parse(stored));
+        const identity = await restorePlayerIdentity(code, s.id);
+        if (alive) setMe(identity);
       } catch {
         if (alive) setNotFound(true);
       }
@@ -72,16 +65,19 @@ export function LivePlayer({ code }: { code: string }) {
     nickname: string,
     avatarColor: string,
     photo: File | null,
+    teamName?: string,
   ) {
     try {
-      const p = await api.join(code, { nickname, avatarColor });
+      const p = await api.join(code, { nickname, avatarColor, teamName });
       const identity: Identity = {
         clientToken: p.clientToken,
         participantId: p.id,
         nickname: p.nickname,
+        teamName: p.teamName,
         avatarColor: p.avatarColor,
         avatarUrl: p.avatarUrl,
       };
+      if (session) savePlayerIdentity(session.id, identity);
       if (photo) {
         try {
           identity.avatarUrl = await uploadImage(photo, {
@@ -92,12 +88,14 @@ export function LivePlayer({ code }: { code: string }) {
           identity.photoWarning = `You joined, but your photo wasn’t uploaded: ${err instanceof Error ? err.message : "Please try a smaller image next time."}`;
         }
       }
-      localStorage.setItem(storeKey(code), JSON.stringify(identity));
+      if (session) savePlayerIdentity(session.id, identity);
       setMe(identity);
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "signin_required") {
         setSigninRequired(true);
       } else {
+        if (err instanceof ApiClientError && err.code === "team_full")
+          setSession(await api.getSession(code));
         throw err;
       }
     }
@@ -144,7 +142,7 @@ export function LivePlayer({ code }: { code: string }) {
   if (!me) {
     return (
       <Screen>
-        <JoinForm onJoin={join} quiz={session.quiz} code={code} />
+        <JoinForm onJoin={join} session={session} code={code} />
       </Screen>
     );
   }
@@ -231,6 +229,14 @@ function Connected({ code, me }: { code: string; me: Identity }) {
       if (payload.powerup)
         setUsedPowerups((used) => [...used, payload.powerup!]);
     } catch (err) {
+      if (err instanceof ApiClientError && err.code === "already_answered") {
+        setPreviousAnswers((ids) => ids.includes(q.id) ? ids : [...ids, q.id]);
+        void api.getProgress(code, me.clientToken).then((progress) => {
+          setUsedPowerups(progress.usedPowerups);
+          setResults((current) => ({ ...current, ...progress.results }));
+        }).catch(() => {});
+        return;
+      }
       if (
         !(
           err instanceof ApiClientError &&
@@ -804,15 +810,16 @@ function FinalBoard({
 
 function JoinForm({
   onJoin,
-  quiz,
+  session,
   code,
 }: {
   onJoin: (
     nickname: string,
     color: string,
     photo: File | null,
+    teamName?: string,
   ) => Promise<void>;
-  quiz: SessionPublic["quiz"];
+  session: SessionPublic;
   code: string;
 }) {
   const [nickname, setNickname] = useState("");
@@ -820,15 +827,19 @@ function JoinForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [teamName, setTeamName] = useState("");
+  const teams = session.teams ?? [];
+  const requiresTeam = session.teamSize != null;
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
-    if (!nickname.trim() || busy) return;
+    if (!nickname.trim() || (requiresTeam && !teamName) || busy) return;
     setBusy(true);
     setError("");
     try {
-      await onJoin(nickname.trim(), color, photo);
+      await onJoin(nickname.trim(), color, photo, teamName || undefined);
     } catch (err) {
+      if (err instanceof ApiClientError && ["team_full", "team_required"].includes(err.code)) setTeamName("");
       setError(
         err instanceof Error ? err.message : "Couldn’t join. Try again.",
       );
@@ -844,9 +855,9 @@ function JoinForm({
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-7 shadow-pop-lg"
     >
-      <QuizCover quiz={quiz} />
+      <QuizCover quiz={session.quiz} />
       <p className="mb-2 text-xs font-bold uppercase tracking-widest text-grape">
-        Live room · {quiz.title}
+        Live room · {session.quiz.title}
       </p>
       <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
         Make an entrance.
@@ -888,9 +899,10 @@ function JoinForm({
         file={photo}
         onChange={setPhoto}
       />
+      {requiresTeam && <TeamPicker teams={teams} teamSize={session.teamSize ?? 1} value={teamName} onChange={setTeamName} />}
       <button
         type="submit"
-        disabled={!nickname.trim() || busy}
+        disabled={!nickname.trim() || (requiresTeam && !teamName) || busy}
         className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl border-2 border-ink bg-grape font-display text-lg font-bold text-white shadow-pop disabled:opacity-50"
       >
         {busy ? "Making room for you…" : "I’m in — join the room"}

@@ -39,19 +39,25 @@ short-lived preview hostname for a long-running event.
 
 ## Deployment order
 
-1. Back up the Preview database, verify the connection points to Preview, and
-   apply migrations there with `pnpm db:migrate`. This game-settings release
-   adds migrations 0005 and 0006 for attack targets, settlement outcomes, and
-   repeatable powerup charges. The older realtime-only release had no migration.
-2. Deploy the code to Preview. Keep Preview and Production on separate databases
-   and Redis/QStash credentials.
-3. Run lint, typecheck, tests, webpack production build, and the two-instance
-   smoke test from [the scale plan](realtime-scale-plan.md).
-4. Run a private live room through start, answer, automatic reveal, reconnect,
-   next, and end.
-5. Back up Production, verify the production database connection, apply the
-   migrations to Production, then promote the deployment. Monitor Redis,
-   QStash, Postgres, and SSE metrics.
+Vercel's Production build automatically applies pending migrations before
+`next build`. This runs only when `VERCEL_ENV=production`; Preview and local
+builds never migrate a database. Configure the Production `DATABASE_URL` before
+the first deploy. If a migration fails, the build fails and the deployment is
+not promoted.
+
+The migration runner serializes deploys with a Postgres transaction-level
+advisory lock and applies migrations transactionally. Keep migrations compatible
+with the currently serving app where possible; defer destructive schema changes
+until old deployments are no longer serving traffic.
+
+For a hobby project, Preview can be used for UI/build checks without a database.
+If you want database-backed Preview tests, configure a separate Preview database
+and credentials; do not point Preview deployments at Production.
+
+Run lint, typecheck, tests, production build, and the two-instance smoke test
+from [the scale plan](realtime-scale-plan.md) before merging when practical.
+After deploy, run a private live room through start, answer, automatic reveal,
+reconnect, next, and end. Monitor Redis, QStash, Postgres, and SSE metrics.
 
 Before promotion, exercise both modes with each answer policy (after each,
 at end, never) and each leaderboard policy (after each live round, at end,
@@ -68,8 +74,8 @@ The private health check is `GET /api/internal/health` with the
 `x-internal-health-secret` header. It returns only component status and is not
 listed in OpenAPI.
 
-Never run `db:push` against Production. Keep the migration step outside the
-Vercel build so two simultaneous builds cannot race a shared database.
+Never run `db:push` against Production. Production migrations run as part of the
+Vercel Production build; Preview builds are explicitly excluded.
 
 ## Local development
 
@@ -77,7 +83,11 @@ Vercel build so two simultaneous builds cannot race a shared database.
 uses `REALTIME_DRIVER=memory` for ordinary local work. To test Redis fan-out,
 set `REALTIME_DRIVER=redis` and `REDIS_URL=redis://localhost:6379`. To test
 durable callbacks, provide a public `APP_URL` through a development tunnel and
-QStash credentials. Production rejects the memory driver.
+QStash credentials. Production rejects the memory driver. `pnpm db:migrate`
+loads `.env.local` and `.env` for local use; an explicitly supplied process
+`DATABASE_URL` takes precedence, as it does during Vercel Production builds.
+`pnpm dev` applies pending migrations before starting Next.js; the Production
+Vercel build applies them before compiling. Both paths stop if a migration fails.
 
 ## Rollback
 
