@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Eye, Trophy, Users, Shuffle, Sparkles } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -13,6 +14,7 @@ import {
 import type { QuizSettings } from "@/lib/db/schema-types";
 import { POWERUP_INFO, POWERUP_ORDER, powerupUses } from "@/lib/powerups";
 import { cn } from "@/lib/utils";
+import { MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames, parseTeamCsv, searchTeams } from "@/lib/teams";
 
 export function QuizSettingsPanel({
   settings,
@@ -54,6 +56,15 @@ export function QuizSettingsPanel({
           onChange({ participation: v as QuizSettings["participation"] })
         }
       />
+
+      <div className="mt-6">
+        <h3 className="mb-2 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
+          <Users className="size-4" /> Teams
+        </h3>
+        <Toggle label="Players choose a team" on={settings.teamSelection ?? false}
+          onChange={(teamSelection) => onChange({ teamSelection })} />
+        {settings.teamSelection && <TeamSettings settings={settings} onChange={onChange} />}
+      </div>
 
       <div className="mt-6">
         <h3 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
@@ -140,6 +151,88 @@ export function QuizSettingsPanel({
       </button>
     </Dialog>
   );
+}
+
+function TeamSettings({ settings, onChange }: {
+  settings: QuizSettings;
+  onChange: (patch: Partial<QuizSettings>) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("");
+  const [importing, setImporting] = useState(false);
+  const names = normalizeTeamNames(settings.teamNames ?? []);
+  const visible = searchTeams(names.map((name) => ({ name })), filter, 30);
+
+  function addNames(added: string[]): boolean {
+    if (!added.length) return false;
+    const next = normalizeTeamNames([...names, ...added]);
+    if (next.some((name) => name.length > MAX_TEAM_NAME_LENGTH)) {
+      setError(`Team names must be ${MAX_TEAM_NAME_LENGTH} characters or less.`);
+      return false;
+    }
+    if (next.length > MAX_TEAM_NAMES) {
+      setError(`A quiz can have up to ${MAX_TEAM_NAMES.toLocaleString()} teams.`);
+      return false;
+    }
+    onChange({ teamNames: next });
+    setError("");
+    return true;
+  }
+
+  function addTeams() {
+    if (addNames(draft.split(/[\n,]+/).map((name) => name.trim()).filter(Boolean))) setDraft("");
+  }
+
+  async function importCsv(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 2_000_000) { setError("Choose a CSV smaller than 2 MB."); return; }
+    setImporting(true);
+    try {
+      const parsed = parseTeamCsv(await file.text());
+      if (!parsed.length) { setError("No team names found in the CSV."); return; }
+      addNames(parsed);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn’t read the CSV.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return <div className="mt-3 rounded-2xl border border-ink/15 bg-white/60 p-4">
+    <p className="text-sm text-ink-soft">Add team names, then set how many players may join each team.</p>
+    <label htmlFor="team-names" className="mt-3 block text-xs font-bold uppercase tracking-wider text-ink-soft">Team names</label>
+    <textarea id="team-names" value={draft} onChange={(event) => setDraft(event.target.value)}
+      placeholder="One name per line, or separate with commas" rows={2} maxLength={500000}
+      className="mt-2 w-full rounded-xl border-2 border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" />
+    <button type="button" onClick={addTeams} disabled={!draft.trim() || names.length >= MAX_TEAM_NAMES}
+      className="mt-2 rounded-xl border-2 border-ink bg-lime px-4 py-2 text-sm font-bold shadow-pop disabled:opacity-40">Add teams</button>
+    <label htmlFor="team-csv" className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-soft">Import CSV</label>
+    <input id="team-csv" type="file" accept=".csv,text/csv" disabled={importing || names.length >= MAX_TEAM_NAMES}
+      onChange={(event) => {
+        void importCsv(event.target.files?.[0]);
+        event.target.value = "";
+      }} className="mt-2 block w-full text-sm file:mr-3 file:rounded-xl file:border-2 file:border-ink file:bg-paper file:px-3 file:py-2 file:font-bold disabled:opacity-40" />
+    <p className="mt-1 text-xs text-ink-soft">One team per row, or a team/name column. Up to {MAX_TEAM_NAMES.toLocaleString()} teams total.</p>
+    {error && <p role="alert" className="mt-2 text-sm text-coral">{error}</p>}
+    {names.length > 0 && <div className="mt-4">
+      <label htmlFor="team-filter" className="text-xs font-bold uppercase tracking-wider text-ink-soft">Teams ({names.length.toLocaleString()})</label>
+      <input id="team-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search teams to remove"
+        className="mt-2 w-full rounded-xl border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-grape focus:outline-none" />
+      <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{visible.map(({ name }) =>
+        <span key={name.toLowerCase()} className="inline-flex items-center gap-2 rounded-full border border-ink/20 bg-paper px-3 py-1 text-sm font-semibold">
+          {name}<button type="button" onClick={() => onChange({ teamNames: names.filter((item) => item !== name) })}
+            aria-label={`Remove ${name}`} className="text-ink-soft hover:text-coral">×</button>
+        </span>)}</div>
+      {names.length > visible.length && <p className="mt-1 text-xs text-ink-soft">Search to see more teams.</p>}
+    </div>}
+    <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-soft">Players per team</p>
+    <div className="mt-2 grid grid-cols-4 gap-2">{([1, 2, 3, 4] as const).map((size) =>
+      <button key={size} type="button" aria-pressed={(settings.teamSize ?? 1) === size}
+        onClick={() => onChange({ teamSize: size })}
+        className={cn("min-h-11 rounded-xl border-2 font-display font-bold transition-colors", (settings.teamSize ?? 1) === size ? "border-ink bg-lime shadow-pop" : "border-ink/15 bg-paper hover:border-ink")}>{size}</button>)}</div>
+    {!names.length && <p className="mt-3 text-sm text-coral">Add at least one team before launching.</p>}
+  </div>;
 }
 
 function Toggle({

@@ -180,6 +180,7 @@ A person in a session. Anonymous by default.
 | id | uuid | no | `gen_random_uuid()` | PK |
 | session_id | uuid | no | | FK `sessions.id` ON DELETE CASCADE |
 | nickname | text | no | | Chosen display name. |
+| team_name | text | yes | | Chosen team, nullable for individual quizzes. |
 | avatar_color | text | no | `'grape'` | Palette key; monogram avatar. |
 | score | integer | no | `0` | Running total, updated on scored answers. |
 | client_token | text | no | | Secret for reconnect and answer submission. |
@@ -224,6 +225,9 @@ These are validated in the application (zod and TypeScript in
 | shuffleOptions | boolean | Randomize option order. |
 | showLeaderboard | boolean | Show a leaderboard between questions. |
 | allowLateJoin | boolean | Permit joining after start (live). |
+| teamSelection | boolean | Require a team choice when joining. |
+| teamNames | string[] | Available teams, deduplicated without case sensitivity. |
+| teamSize | integer | Maximum participants per team, 1–4. |
 
 ### QuestionSettings (`questions.settings`)
 

@@ -12,7 +12,7 @@ import type {
 
 export const DEFAULT_REVEAL: RevealPolicy = "per_question";
 export const DEFAULT_LEADERBOARD: LeaderboardPolicy = "at_end";
-export const DEFAULT_PARTICIPATION: ParticipationMode = "anonymous";
+export const DEFAULT_PARTICIPATION: ParticipationMode = "one_per_device";
 
 export function revealPolicy(s: QuizSettings | null | undefined): RevealPolicy {
   return s?.revealAnswers ?? DEFAULT_REVEAL;

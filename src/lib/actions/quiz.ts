@@ -1,10 +1,11 @@
 "use server";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { options, questions, quizzes, uploads } from "@/lib/db/schema";
+import { options, questions, quizzes, sessions, uploads } from "@/lib/db/schema";
+import { participationMode } from "@/lib/quiz-policy";
 import { DEFAULTS, OPTION_COLORS } from "@/lib/quiz-constants";
 import {
   requireQuizOwner,
@@ -12,6 +13,7 @@ import {
   requireOptionOwner,
 } from "@/lib/quiz-access";
 import { isMediaUrl, isUploadUrl } from "@/lib/media";
+import { MAX_TEAM_NAME_LENGTH, MAX_TEAM_NAMES, normalizeTeamNames } from "@/lib/teams";
 import type {
   OptionRow,
   QuestionType,
@@ -85,6 +87,9 @@ export async function createQuiz(input: z.input<typeof createQuizSchema>) {
 }
 
 const quizSettingsSchema = z.object({
+  teamSelection: z.boolean().optional(),
+  teamNames: z.array(z.string().trim().min(1).max(MAX_TEAM_NAME_LENGTH)).max(MAX_TEAM_NAMES).transform(normalizeTeamNames).optional(),
+  teamSize: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
   coverImage: z.string().max(2048).refine(isMediaUrl).nullable().optional(),
   iconImage: z.string().max(2048).refine(isMediaUrl).nullable().optional(),
   speedBonus: z.boolean().optional(),
@@ -116,6 +121,19 @@ export async function updateQuiz(
   await requireQuizOwner(quizId);
   const data = updateQuizSchema.parse(patch);
   if (Object.keys(data).length === 0) return;
+  if (data.settings) {
+    const [current] = await db.select({ settings: quizzes.settings }).from(quizzes)
+      .where(eq(quizzes.id, quizId)).limit(1);
+    if (current && participationMode(current.settings) !== participationMode(data.settings)) {
+      const [open] = await db.select({ id: sessions.id }).from(sessions)
+        .where(and(
+          eq(sessions.quizId, quizId),
+          ne(sessions.status, "ended"),
+          or(ne(sessions.mode, "scheduled"), isNull(sessions.closesAt), gt(sessions.closesAt, new Date())),
+        )).limit(1);
+      if (open) throw new Error("End the active session before changing who can play.");
+    }
+  }
   await db
     .update(quizzes)
     .set({ ...data, updatedAt: new Date() })

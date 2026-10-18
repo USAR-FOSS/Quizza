@@ -17,6 +17,8 @@ support. See [the current gaps](docs/gaps.md) for remaining work.
   - Live: host-driven, everyone synced to the same question.
   - Scheduled: open for a set window, taken self-paced.
 - Players join with a nickname. No account required.
+- Hosts can enable team selection, import up to 5,000 deduplicated team names
+  from CSV, and limit each team to 1–4 players. Players search for a team when joining.
 - Answers record accuracy and response time. Scoring rewards speed and accuracy,
   with a leaderboard.
 - Hosts sign in through email/password or configured FOSSClub OIDC, own their
@@ -59,8 +61,7 @@ docker run --name quizza-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=quizza -p 5432:5432 -d postgres:16
 
 pnpm db:generate                    # SQL from the schema into drizzle/
-pnpm db:migrate                     # apply migrations
-pnpm dev                            # http://localhost:3000
+pnpm dev                            # applies migrations, then starts http://localhost:3000
 ```
 
 For local full-stack development, `docker compose up --build` also starts
@@ -130,9 +131,11 @@ realtime under `src/lib`.
 - [x] Shared Redis realtime/rate-limit backend and durable live reveal scheduler
 - [ ] Load testing and measured capacity at the PRD's full concurrency target
 
-After updating an existing installation, run `pnpm db:migrate` before starting
-the app. Migrations 0003–0006 cover durable question views, image uploads,
-and the repeatable powerup/attack model.
+`pnpm dev` and Vercel Production builds apply pending migrations before starting
+the app. Other deployment targets should run `pnpm db:migrate` before `pnpm start`.
+Migrations 0003–0006 cover durable question views, image uploads,
+and the repeatable powerup/attack model. Migration 0007 adds participant team
+assignments; apply it before deploying team selection.
 See [upgrade notes](docs/upgrade.md) for API and behavior changes.
 
 ## License

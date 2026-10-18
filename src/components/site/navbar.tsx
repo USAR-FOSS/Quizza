@@ -1,7 +1,27 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { CircleUserRound, LogIn } from "lucide-react";
 import { GithubIcon } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/site/logo";
+import { getCurrentUser } from "@/lib/auth";
+import { NavLogout } from "@/components/site/nav-logout";
+
+async function NavAccount() {
+  const user = await getCurrentUser();
+  if (!user) return <Link href="/login" aria-label="Sign in" title="Sign in"
+    className="inline-flex size-10 items-center justify-center rounded-xl text-grape hover:bg-grape/10">
+    <LogIn className="size-5" aria-hidden="true" />
+  </Link>;
+  return <div className="flex items-center gap-1">
+    <Link href="/dashboard" aria-label={`Signed in as ${user.name || user.email || "Host"}. My quizzes`}
+      className="inline-flex size-10 items-center justify-center rounded-xl text-grape hover:bg-grape/10"
+      title={`Signed in as ${user.name || user.email || "Host"}`}>
+      <CircleUserRound className="size-5" aria-hidden="true" />
+    </Link>
+    <NavLogout />
+  </div>;
+}
 
 export function Navbar() {
   return (
@@ -29,7 +49,7 @@ export function Navbar() {
           </Link>
           <Link
             href="/dashboard"
-            className="rounded-xl px-1 py-2 text-xs font-semibold text-ink-soft transition-colors hover:text-grape sm:px-3 sm:text-sm"
+            className="hidden rounded-xl px-1 py-2 text-xs font-semibold text-ink-soft transition-colors hover:text-grape sm:block sm:px-3 sm:text-sm"
           >
             My quizzes
           </Link>
@@ -42,6 +62,9 @@ export function Navbar() {
             <GithubIcon className="size-4" />
             GitHub
           </a>
+          <Suspense fallback={<span className="size-10 animate-pulse rounded-xl bg-ink/10" aria-hidden="true" />}>
+            <NavAccount />
+          </Suspense>
           <Button href="/create" variant="primary" size="sm">
             <span className="sm:hidden">Create</span>
             <span className="hidden sm:inline">Create a quiz</span>

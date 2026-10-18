@@ -393,7 +393,7 @@ function MiniBoard({ snap, full }: { snap: HostSnapshot; full?: boolean }) {
             size="sm"
           />
           <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">
-            {e.nickname}
+            {e.nickname}{e.teamName && <span className="ml-2 font-sans text-xs font-medium text-ink-soft">{e.teamName}</span>}
           </span>
           <span className="font-display font-extrabold text-ink">
             {e.score}

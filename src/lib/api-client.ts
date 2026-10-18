@@ -26,6 +26,8 @@ export type SessionPublic = {
   closesAt: string | null;
   participantCount: number;
   participation: ParticipationMode;
+  teams: { name: string; joined: number }[];
+  teamSize: number | null;
   powerups: boolean;
   powerupUses: number;
   powerupTypes: Powerup[];
@@ -51,6 +53,7 @@ export type SessionCreated = {
 export type ParticipantCreated = {
   id: string;
   nickname: string;
+  teamName: string | null;
   avatarColor: string;
   avatarUrl?: string | null;
   clientToken: string;
@@ -89,6 +92,7 @@ export type AnswerResult = {
 export type LeaderboardEntry = {
   participantId: string;
   nickname: string;
+  teamName: string | null;
   avatarColor: string;
   avatarUrl?: string | null;
   score: number;
@@ -188,7 +192,7 @@ export const api = {
       headers: { "x-client-token": clientToken },
     }),
 
-  join: (code: string, body: { nickname: string; avatarColor?: string }) =>
+  join: (code: string, body: { nickname: string; avatarColor?: string; teamName?: string }) =>
     request<ParticipantCreated>(`/sessions/${code}/participants`, {
       method: "POST",
       body: JSON.stringify(body),

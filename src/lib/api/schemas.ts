@@ -36,9 +36,10 @@ export const CreateSessionBody = z
 export const JoinBody = z
   .object({
     nickname: z.string().trim().min(1).max(40),
+    teamName: z.string().trim().min(1).max(80).optional(),
     avatarColor: colorEnum.optional(),
   })
-  .describe("Join a session as an anonymous participant");
+  .describe("Join a session as a participant");
 
 export const SubmitAnswerBody = z
   .object({
@@ -92,6 +93,8 @@ export const SessionPublic = z.object({
   closesAt: z.string().nullable(),
   participantCount: z.number().int(),
   participation: participationEnum,
+  teams: z.array(z.object({ name: z.string(), joined: z.number().int() })),
+  teamSize: z.number().int().nullable(),
   powerups: z.boolean(),
   powerupUses: z.number().int(),
   powerupTypes: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
@@ -101,6 +104,7 @@ export const SessionPublic = z.object({
 export const Participant = z.object({
   id: z.string().uuid(),
   nickname: z.string(),
+  teamName: z.string().nullable(),
   avatarColor: z.string(),
   avatarUrl: z.string().nullable().optional(),
   // returned only at join; the client keeps this to reconnect and submit
@@ -157,6 +161,7 @@ export const ParticipantProgress = z.object({
 export const LeaderboardEntry = z.object({
   participantId: z.string().uuid(),
   nickname: z.string(),
+  teamName: z.string().nullable(),
   avatarColor: z.string(),
   avatarUrl: z.string().nullable().optional(),
   score: z.number().int(),

@@ -125,6 +125,7 @@ export async function buildSnapshots(
   const leaderboard: LiveLeaderboardEntry[] = parts.map((p, i) => ({
     participantId: p.id,
     nickname: p.nickname,
+    teamName: p.teamName,
     avatarColor: p.avatarColor,
     avatarUrl: p.avatarUrl,
     score: p.score,
