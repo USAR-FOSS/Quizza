@@ -1,13 +1,13 @@
 # Team email roster
 
 Team email checks are optional and leave existing team quizzes unchanged. In
-Quiz settings, turn on **Players choose a team**, choose 1–4 players per team,
+Quiz settings, turn on **Players choose a team**, choose 1–4 attempts per team,
 then turn on **Check team members by email**. This also selects the signed-in
 participation policy. Each team needs at least one listed email before launch.
 
-Add members using the two aligned text columns: one team name and one email
-per line. Repeat a team name for each of its members. Or import a CSV with
-headers `Team Names,Emails` and one member per row:
+With email checks enabled, add each member once as a team and email pair, one
+per line. Team names are created from these rows automatically. Or import a
+CSV with headers `Team Names,Emails` and one member per row:
 
 ```csv
 Team Names,Emails
@@ -18,8 +18,12 @@ Red Foxes,lee@example.org
 
 Header matching and roster email matching are case-insensitive. Quoted CSV
 values are supported. Duplicate copies of the same email on one team are
-collapsed; assigning one email to different teams is rejected. The roster
-cannot exceed the selected team size. Removing a team also removes its roster
+collapsed; assigning one email to different teams is rejected. A team can list
+more eligible emails than its attempt limit. For example, five members may be
+listed for a team with one attempt, allowing any one of them to play. Each
+join reserves an attempt permanently for that session, including after leaving
+or finishing. The same account resumes its original attempt. Once the team's
+limit is reached, other members see that its attempts are used. Removing a team also removes its roster
 entries. Team and roster changes are blocked while a session is open.
 
 At join, players sign in with FOSSClub, select a team, and type a listed email.

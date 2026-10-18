@@ -49,12 +49,12 @@ describe("team names", () => {
       .toThrow("Team Names and Emails");
   });
 
-  it("deduplicates roster emails case-insensitively and rejects conflicting teams or capacity", () => {
+  it("deduplicates roster emails case-insensitively and rejects conflicting teams", () => {
     const roster = normalizeTeamRoster([
       { teamName: " blue ", email: "  A@EXAMPLE.ORG " },
       { teamName: "BLUE", email: "a@example.org" },
       { teamName: "Red", email: "b@example.org" },
-    ], ["Blue", "Red"], 2);
+    ], ["Blue", "Red"]);
     expect(roster).toEqual([
       { teamName: "Blue", email: "a@example.org" },
       { teamName: "Red", email: "b@example.org" },
@@ -63,10 +63,13 @@ describe("team names", () => {
     expect(() => normalizeTeamRoster([
       { teamName: "Blue", email: "a@example.org" },
       { teamName: "Red", email: "A@example.org" },
-    ], ["Blue", "Red"], 2)).toThrow("more than one team");
-    expect(() => normalizeTeamRoster([
-      { teamName: "Blue", email: "a@example.org" },
-      { teamName: "Blue", email: "b@example.org" },
-    ], ["Blue"], 1)).toThrow("more than 1");
+    ], ["Blue", "Red"])).toThrow("more than one team");
+  });
+
+  it("keeps every eligible member independently of the number of attempts", () => {
+    const members = Array.from({ length: 6 }, (_, i) => ({ teamName: "Blue", email: `member${i}@example.org` }));
+    const roster = normalizeTeamRoster(members, ["Blue"]);
+    expect(roster).toEqual(members);
+    for (const member of members) expect(rosterTeamForEmail(roster, member.email)).toBe("Blue");
   });
 });

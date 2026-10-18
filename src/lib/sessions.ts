@@ -85,7 +85,7 @@ export async function validateQuizForLaunch(quizId: string): Promise<string[]> {
     if (!oidcEnabled()) problems.push("Configure FOSSClub sign-in before launching an email-rostered quiz.");
     try {
       const teamNames = normalizeTeamNames(quiz.settings.teamNames ?? []);
-      const roster = normalizeTeamRoster(quiz.settings.teamRoster ?? [], teamNames, quiz.settings.teamSize ?? 1);
+      const roster = normalizeTeamRoster(quiz.settings.teamRoster ?? [], teamNames);
       const rosteredTeams = new Set(roster.map((member) => member.teamName));
       if (teamNames.some((name) => !rosteredTeams.has(name)))
         problems.push("Add at least one rostered email for every team.");
@@ -541,7 +541,7 @@ export async function joinSession(
       const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(participants)
         .where(and(eq(participants.sessionId, s.id), eq(participants.teamName, teamName)));
       if (count >= (settings.teamSize ?? 1))
-        throw new HttpError(409, "team_full", `${teamName} is full. Choose another team.`);
+        throw new HttpError(409, "team_full", `${teamName} has already used all ${settings.teamSize ?? 1} allowed ${settings.teamSize === 1 || !settings.teamSize ? "attempt" : "attempts"} for this quiz.`);
       const [joined] = await tx.insert(participants).values(values).returning();
       return joined;
     }) : (await db.insert(participants).values(values).returning())[0];
