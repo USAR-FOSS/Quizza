@@ -45,7 +45,13 @@ export function scheduleRosterBatch(
   if (!participantIds.length) return;
   void (async () => {
     const rows = await db
-      .select()
+      .select({
+        id: participants.id,
+        nickname: participants.nickname,
+        avatarColor: participants.avatarColor,
+        avatarUrl: participants.avatarUrl,
+        score: participants.score,
+      })
       .from(participants)
       .where(and(
         eq(participants.sessionId, sessionId),

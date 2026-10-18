@@ -10,7 +10,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations, sql } from "drizzle-orm";
+import { relations, sql, desc } from "drizzle-orm";
 import type { QuizSettings, QuestionSettings } from "./schema-types";
 export type { QuizSettings, QuestionSettings } from "./schema-types";
 
@@ -57,6 +57,7 @@ export const users = pgTable(
     // scrypt hash for email/password accounts; null for OIDC accounts.
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("host"),
+    sessionVersion: integer("session_version").default(1).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -182,6 +183,7 @@ export const sessions = pgTable(
     uniqueIndex("sessions_code_active_key")
       .on(t.code)
       .where(sql`${t.status} <> 'ended'`),
+    index("sessions_code_created_idx").on(t.code, desc(t.createdAt)),
     index("sessions_quiz_idx").on(t.quizId),
   ],
 );
@@ -273,6 +275,7 @@ export const answers = pgTable(
   (t) => [
     index("answers_question_idx").on(t.questionId),
     index("answers_session_idx").on(t.sessionId),
+    index("answers_session_question_idx").on(t.sessionId, t.questionId),
     // a participant answers each question at most once.
     uniqueIndex("answers_unique_response").on(t.questionId, t.participantId),
     index("answers_participant_powerup_idx").on(t.participantId, t.powerup),

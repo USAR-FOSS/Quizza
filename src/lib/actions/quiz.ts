@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
@@ -298,16 +298,21 @@ export async function reorderQuestions(quizId: string, orderedIds: string[]) {
   ) {
     throw new Error("Question order must contain every question exactly once.");
   }
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < orderedIds.length; i++) {
-      await tx
-        .update(questions)
-        .set({ position: i })
-        .where(
-          and(eq(questions.id, orderedIds[i]), eq(questions.quizId, quizId)),
-        );
-    }
-  });
+  if (orderedIds.length === 0) return;
+  const cases = orderedIds.map(
+    (id, i) => sql`WHEN ${questions.id} = ${id} THEN ${i}`,
+  );
+  await db
+    .update(questions)
+    .set({
+      position: sql`CASE ${sql.join(cases, sql` `)} END`,
+    })
+    .where(
+      and(
+        eq(questions.quizId, quizId),
+        inArray(questions.id, orderedIds),
+      ),
+    );
 }
 
 /* ------------------------------------------------------------------ *

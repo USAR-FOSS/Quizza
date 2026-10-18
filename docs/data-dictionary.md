@@ -85,15 +85,15 @@ password). Anonymous participants are not users.
 |--------|------|------|---------|-------|
 | id | uuid | no | `gen_random_uuid()` | PK |
 | subject | text | yes | | OIDC subject (`sub`). Unique when present. |
-| email | text | yes | | Host email. |
+| email | text | yes | | Host email. Unique when present. |
 | name | text | yes | | Display name. |
 | avatar_url | text | yes | | From OIDC `picture`. |
+| password_hash | text | yes | | Scrypt hash for password accounts. |
+| role | text | no | `'host'` | Host role. |
+| session_version | integer | no | `1` | Incrementing version for session revocation. |
 | created_at | timestamptz | no | `now()` | |
 
-Indexes: unique `users_subject_key (subject)`.
-
-Planned (not yet present): `password_hash`, `role`, `member`, `github_id`. See
-ADR 0014.
+Indexes: unique `users_subject_key (subject)`, unique `users_email_key (email)`.
 
 ### quizzes
 
@@ -167,7 +167,7 @@ A single run of a quiz, either live or scheduled.
 | created_at | timestamptz | no | `now()` | |
 | ended_at | timestamptz | yes | | Set when the run ends. |
 
-Indexes: `sessions_quiz_idx (quiz_id)`; partial unique
+Indexes: `sessions_quiz_idx (quiz_id)`, `sessions_code_created_idx (code, created_at DESC)`; partial unique
 `sessions_code_active_key (code) WHERE status <> 'ended'` so a code is unique
 while live and reusable after a run ends.
 
@@ -211,7 +211,8 @@ run modes; records accuracy and timing identically.
 | points | integer | no | `0` | Server-computed, never trusted from the client. |
 | created_at | timestamptz | no | `now()` | |
 
-Indexes: `answers_question_idx (question_id)`, `answers_session_idx (session_id)`;
+Indexes: `answers_question_idx (question_id)`, `answers_session_idx (session_id)`,
+`answers_session_question_idx (session_id, question_id)`;
 unique `answers_unique_response (question_id, participant_id)` enforcing one
 answer per participant per question.
 

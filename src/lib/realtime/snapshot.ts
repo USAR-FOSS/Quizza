@@ -117,7 +117,14 @@ export async function buildSnapshots(
   }
 
   const parts = await db
-    .select()
+    .select({
+      id: participants.id,
+      nickname: participants.nickname,
+      teamName: participants.teamName,
+      avatarColor: participants.avatarColor,
+      avatarUrl: participants.avatarUrl,
+      score: participants.score,
+    })
     .from(participants)
     .where(eq(participants.sessionId, sessionId))
     .orderBy(desc(participants.score), asc(participants.joinedAt));
@@ -187,7 +194,11 @@ export async function buildSnapshots(
     correctOptionId = current.options.find((o) => o.isCorrect)?.id ?? null;
 
     const ans = await db
-      .select()
+      .select({
+        optionId: answers.optionId,
+        textValue: answers.textValue,
+        numberValue: answers.numberValue,
+      })
       .from(answers)
       .where(
         and(

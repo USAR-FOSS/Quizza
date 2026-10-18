@@ -5,7 +5,13 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { createSessionCookie, oidcEnabled } from "@/lib/auth";
+import {
+  createSessionCookie,
+  getCurrentUser,
+  oidcEnabled,
+  revokeUserSessions,
+  sanitizeRedirectPath,
+} from "@/lib/auth";
 
 function fail(req: NextRequest, reason: string) {
   return NextResponse.redirect(new URL(`/login?error=${reason}`, req.url));
@@ -84,38 +90,66 @@ export async function GET(req: NextRequest) {
       "Host";
     const picture = typeof claims.picture === "string" ? claims.picture : null;
 
-    // Resolve the account: by OIDC subject first, then by email (so a FOSSClub
-    // sign-in links to an existing email/password account instead of colliding
-    // on the unique email).
+    // Resolve the account: by OIDC subject first.
     let account = (
       await db.select().from(users).where(eq(users.subject, sub)).limit(1)
     )[0];
+
+    // If no account is matched by subject, check if an existing account holds this email.
     if (!account && email) {
-      account = (
+      const existing = (
         await db.select().from(users).where(eq(users.email, email)).limit(1)
       )[0];
+
+      if (existing) {
+        // Safe account linking:
+        // Reject if the existing account is already associated with a different OIDC subject.
+        if (existing.subject && existing.subject !== sub) {
+          console.warn("[oidc] email already linked to a different provider identity", email);
+          return fail(req, "oidc_account_conflict");
+        }
+
+        // Require proof of authentication to the existing account before linking.
+        // Never link an unauthenticated OIDC flow to an existing password account
+        // solely because the email strings match.
+        const currentUser = await getCurrentUser();
+        if (currentUser && currentUser.id === existing.id) {
+          account = existing;
+        } else {
+          console.warn("[oidc] refusing to link unauthenticated account by email", email);
+          return fail(req, "oidc_account_exists");
+        }
+      }
     }
 
     let userId: string;
+    let sessionVersion: number;
     if (account) {
       userId = account.id;
+      // Revoke any previous sessions on this account to ensure full isolation
+      await revokeUserSessions(userId);
+      sessionVersion = account.sessionVersion + 1;
       await db
         .update(users)
-        .set({ subject: sub, email: email ?? account.email, name, avatarUrl: picture ?? account.avatarUrl })
+        .set({
+          subject: sub,
+          email: email ?? account.email,
+          name,
+          avatarUrl: picture ?? account.avatarUrl,
+        })
         .where(eq(users.id, userId));
     } else {
       const [u] = await db
         .insert(users)
-        .values({ subject: sub, email, name, avatarUrl: picture })
+        .values({ subject: sub, email, name, avatarUrl: picture, sessionVersion: 1 })
         .returning();
       userId = u.id;
+      sessionVersion = u.sessionVersion;
     }
 
-    await createSessionCookie(userId);
+    await createSessionCookie(userId, sessionVersion);
     const requestedNext = jar.get("oidc_next")?.value;
-    const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") && !requestedNext.includes("\\")
-      ? requestedNext
-      : "/dashboard";
+    const next = sanitizeRedirectPath(requestedNext, "/dashboard");
     jar.delete("oidc_verifier");
     jar.delete("oidc_state");
     jar.delete("oidc_nonce");

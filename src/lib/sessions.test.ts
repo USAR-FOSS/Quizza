@@ -123,15 +123,22 @@ describe("answer integrity", () => {
       (await getProgress("123456", "token")).results.question,
     ).toMatchObject({ revealed: true, isCorrect: true, pointsAwarded: 100 });
   });
-  it("keeps personal correctness hidden when the host disables answers", async () => {
+  it("keeps personal correctness and attack metadata hidden when the host disables answers", async () => {
     mocks.rows.sessions = [{ ...session, revealed: true }];
     mocks.rows.answers = [
-      { questionId: "question", isCorrect: true, points: 100, powerup: null },
+      { questionId: "question", isCorrect: true, points: 100, powerup: "attack", attackStolen: 30, attackBlocked: false },
     ];
     mocks.quiz.mockResolvedValue({ settings: { revealAnswers: "never" } });
     expect(
       (await getProgress("123456", "token")).results.question,
-    ).toMatchObject({ revealed: false, isCorrect: null, pointsAwarded: null });
+    ).toMatchObject({
+      revealed: false,
+      isCorrect: null,
+      pointsAwarded: null,
+      attackStolen: 0,
+      attackBlocked: false,
+      attackedLoss: 0,
+    });
   });
   it("enforces the live deadline on the server", async () => {
     mocks.rows.sessions = [

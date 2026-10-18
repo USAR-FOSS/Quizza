@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { authSecret } from "./auth-secret";
@@ -43,8 +43,11 @@ export async function verifyPassword(
 
 /* ------------------------------ session ----------------------------- */
 
-export async function createSessionCookie(userId: string): Promise<void> {
-  const token = await new SignJWT({ sub: userId })
+export async function createSessionCookie(
+  userId: string,
+  sessionVersion = 1,
+): Promise<void> {
+  const token = await new SignJWT({ sub: userId, v: sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
@@ -64,6 +67,13 @@ export async function clearSessionCookie(): Promise<void> {
   jar.delete(COOKIE);
 }
 
+export async function revokeUserSessions(userId: string): Promise<void> {
+  await db
+    .update(users)
+    .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, userId));
+}
+
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
@@ -73,7 +83,11 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     const id = typeof payload.sub === "string" ? payload.sub : null;
     if (!id) return null;
     const [u] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return u ?? null;
+    if (!u) return null;
+    if (typeof payload.v === "number" && payload.v !== u.sessionVersion) {
+      return null;
+    }
+    return u;
   } catch {
     return null;
   }
@@ -82,4 +96,29 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 /** Whether OIDC sign-in is configured on this instance. */
 export function oidcEnabled(): boolean {
   return Boolean(process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET);
+}
+
+/**
+ * Validate and sanitize a post-auth redirect path.
+ * Must be a relative path on the same origin (starting with a single "/").
+ * Rejects control characters, protocol-relative paths ("//"), backslashes,
+ * and external URLs.
+ */
+export function sanitizeRedirectPath(
+  next: string | null | undefined,
+  fallback = "/dashboard",
+): string {
+  if (!next || typeof next !== "string") return fallback;
+  // Reject ASCII control characters (\x00-\x1F, \x7F), including tab (\t), LF (\n), CR (\r)
+  if (/[\x00-\x1F\x7F]/.test(next)) return fallback;
+  // Must start with exactly one leading slash (not // or \ or /\)
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return fallback;
+  try {
+    const parsed = new URL(next, "http://localhost");
+    // Ensure it remained same-origin and didn't change protocol/host
+    if (parsed.origin !== "http://localhost") return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
 }

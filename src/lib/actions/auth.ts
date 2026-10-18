@@ -54,7 +54,7 @@ export async function registerAction(input: unknown): Promise<Result> {
       passwordHash: await hashPassword(parsed.data.password),
     })
     .returning();
-  await createSessionCookie(u.id);
+  await createSessionCookie(u.id, u.sessionVersion);
   return { ok: true };
 }
 
@@ -83,7 +83,7 @@ export async function loginAction(input: unknown): Promise<Result> {
   ) {
     return { error: "Invalid email or password" };
   }
-  await createSessionCookie(u.id);
+  await createSessionCookie(u.id, u.sessionVersion);
   return { ok: true };
 }
 

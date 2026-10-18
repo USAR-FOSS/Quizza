@@ -25,6 +25,22 @@ describe("team names", () => {
       .toEqual([{ name: "ALPHA" }]);
   });
 
+  it.each(['Blue"Birds"', '"Blue"Birds', '"Blue" "Birds"'])(
+    "rejects malformed CSV quoting instead of silently changing %s",
+    (value) => {
+      expect(() => parseTeamCsv(`Team Names\n${value}`)).toThrow();
+      expect(() => parseTeamRosterCsv(`Team Names,Emails\n${value},a@example.org`)).toThrow();
+    },
+  );
+
+  it("preserves escaped quotes, embedded newlines and empty trailing CSV fields", () => {
+    expect(parseTeamCsv('Team Names,ID\r\n"Blue ""Birds""",1\r\n"Red\nFoxes",2'))
+      .toEqual(['Blue "Birds"', "Red Foxes"]);
+    expect(parseTeamRosterCsv('Team Names,Emails,ID\r\n"Blue ""Birds""",a@example.org,\r\n'))
+      .toEqual([{ teamName: 'Blue "Birds"', email: "a@example.org" }]);
+    expect(() => parseTeamCsv('Team Names\n"Blue')).toThrow("unclosed quoted");
+  });
+
   it("maps aligned manual team and email columns", () => {
     expect(parseTeamRosterColumns("Blue\nBlue\nRed\n", "a@example.org\nb@example.org\nc@example.org\n"))
       .toEqual([

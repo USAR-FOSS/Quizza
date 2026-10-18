@@ -207,23 +207,37 @@ export async function getProgress(code: string, token: string | null) {
   const participant = token ? await getParticipant(s.id, token) : null;
   if (!participant)
     throw new HttpError(401, "invalid_token", "Unknown participant");
-  const rows = await db
-    .select()
-    .from(answers)
-    .where(
-      and(
-        eq(answers.sessionId, s.id),
-        eq(answers.participantId, participant.id),
+  const [rows, settings, incoming] = await Promise.all([
+    db
+      .select({
+        questionId: answers.questionId,
+        isCorrect: answers.isCorrect,
+        points: answers.points,
+        powerup: answers.powerup,
+        attackStolen: answers.attackStolen,
+        attackBlocked: answers.attackBlocked,
+      })
+      .from(answers)
+      .where(
+        and(
+          eq(answers.sessionId, s.id),
+          eq(answers.participantId, participant.id),
+        ),
       ),
-    );
-  const settings = await sessionSettings(s);
-  const incoming = await db.select({
-    questionId: answers.questionId,
-    attackStolen: answers.attackStolen,
-  }).from(answers).where(and(
-    eq(answers.sessionId, s.id),
-    eq(answers.powerupTargetId, participant.id),
-  ));
+    sessionSettings(s),
+    db
+      .select({
+        questionId: answers.questionId,
+        attackStolen: answers.attackStolen,
+      })
+      .from(answers)
+      .where(
+        and(
+          eq(answers.sessionId, s.id),
+          eq(answers.powerupTargetId, participant.id),
+        ),
+      ),
+  ]);
   const lossByQuestion = new Map<string, number>();
   for (const attack of incoming)
     lossByQuestion.set(attack.questionId, (lossByQuestion.get(attack.questionId) ?? 0) + attack.attackStolen);
@@ -254,9 +268,9 @@ export async function getProgress(code: string, token: string | null) {
       isCorrect: visible ? a.isCorrect : null,
       pointsAwarded: visible ? a.points : null,
       correctOptionId: null,
-      attackStolen: a.attackStolen,
-      attackBlocked: a.attackBlocked,
-      attackedLoss: lossByQuestion.get(a.questionId) ?? 0,
+      attackStolen: visible ? a.attackStolen : 0,
+      attackBlocked: visible ? a.attackBlocked : false,
+      attackedLoss: visible ? (lossByQuestion.get(a.questionId) ?? 0) : 0,
     };
   }
   return {
@@ -409,15 +423,17 @@ export async function createSession(
 
 export async function getPublicSession(code: string) {
   const s = await requireSession(code);
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    columns: { title: true, coverIcon: true, theme: true, settings: true },
-  });
-  const teamCounts = await db
-    .select({ teamName: participants.teamName, count: sql<number>`count(*)::int` })
-    .from(participants)
-    .where(eq(participants.sessionId, s.id))
-    .groupBy(participants.teamName);
+  const [quiz, teamCounts] = await Promise.all([
+    db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      columns: { title: true, coverIcon: true, theme: true, settings: true },
+    }),
+    db
+      .select({ teamName: participants.teamName, count: sql<number>`count(*)::int` })
+      .from(participants)
+      .where(eq(participants.sessionId, s.id))
+      .groupBy(participants.teamName),
+  ]);
   const count = teamCounts.reduce((total, row) => total + row.count, 0);
   const settings = (quiz?.settings as QuizSettings) ?? {};
   const teams = settings.teamSelection ? normalizeTeamNames(settings.teamNames ?? []).map((name) => ({
@@ -634,38 +650,36 @@ export async function listQuestions(code: string, clientToken: string | null) {
     throw new HttpError(401, "invalid_token", "Unknown participant");
   }
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: {
-        orderBy: asc(questions.position),
-        with: { options: { orderBy: asc(options.position) } },
+  const [quiz, answered, views] = await Promise.all([
+    db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      with: {
+        questions: {
+          orderBy: asc(questions.position),
+          with: { options: { orderBy: asc(options.position) } },
+        },
       },
-    },
-  });
+    }),
+    db
+      .select({ questionId: answers.questionId, powerup: answers.powerup })
+      .from(answers)
+      .where(
+        and(
+          eq(answers.sessionId, s.id),
+          eq(answers.participantId, participant.id),
+        ),
+      ),
+    db
+      .select({ questionId: questionViews.questionId, startedAt: questionViews.startedAt })
+      .from(questionViews)
+      .where(eq(questionViews.participantId, participant.id)),
+  ]);
 
   const settings = (quiz?.settings as QuizSettings) ?? {};
   let qlist = quiz?.questions ?? [];
   // deterministic per-participant shuffle, so order is stable across reloads
   if (settings.shuffleQuestions)
     qlist = seededShuffle(qlist, `q:${participant.id}`);
-
-  // which questions this participant has already answered, so the client can
-  // resume at the right place after a refresh.
-  const answered = await db
-    .select({ questionId: answers.questionId, powerup: answers.powerup })
-    .from(answers)
-    .where(
-      and(
-        eq(answers.sessionId, s.id),
-        eq(answers.participantId, participant.id),
-      ),
-    );
-
-  const views = await db
-    .select()
-    .from(questionViews)
-    .where(eq(questionViews.participantId, participant.id));
   const expired = views
     .filter((v) => {
       const q = qlist.find((q) => q.id === v.questionId);
@@ -727,19 +741,24 @@ export async function issueViewToken(
     columns: { id: true },
   });
   if (!q) throw new HttpError(404, "question_not_found", "Question not found");
-  await db
+  const [inserted] = await db
     .insert(questionViews)
     .values({ participantId: participant.id, questionId: q.id })
-    .onConflictDoNothing();
-  const [view] = await db
-    .select()
-    .from(questionViews)
-    .where(
-      and(
-        eq(questionViews.participantId, participant.id),
-        eq(questionViews.questionId, q.id),
-      ),
-    );
+    .onConflictDoNothing()
+    .returning({ startedAt: questionViews.startedAt });
+  const view =
+    inserted ??
+    (await db
+      .select({ startedAt: questionViews.startedAt })
+      .from(questionViews)
+      .where(
+        and(
+          eq(questionViews.participantId, participant.id),
+          eq(questionViews.questionId, q.id),
+        ),
+      )
+      .limit(1)
+      .then(([v]) => v));
   return {
     viewToken: signViewToken(
       s.id,
@@ -758,18 +777,20 @@ export async function submitAnswer(
   input: z.infer<typeof SubmitAnswerBody>,
 ) {
   const s = await requireSession(code);
-  const participant = await getParticipant(s.id, input.clientToken);
+  const [participant, q, settings] = await Promise.all([
+    getParticipant(s.id, input.clientToken),
+    db.query.questions.findFirst({
+      where: and(
+        eq(questions.id, input.questionId),
+        eq(questions.quizId, s.quizId),
+      ),
+      with: { options: true },
+    }),
+    sessionSettings(s),
+  ]);
   if (!participant) {
     throw new HttpError(404, "participant_not_found", "Unknown participant");
   }
-
-  const q = await db.query.questions.findFirst({
-    where: and(
-      eq(questions.id, input.questionId),
-      eq(questions.quizId, s.quizId),
-    ),
-    with: { options: true },
-  });
   if (!q)
     throw new HttpError(
       404,
@@ -797,7 +818,6 @@ export async function submitAnswer(
   }
 
   const meta = QUESTION_TYPES[q.type];
-  const settings = await sessionSettings(s);
   if (input.powerup && (!meta.scorable || !enabledPowerups(settings, s.mode).includes(input.powerup))) {
     throw new HttpError(
       422,
@@ -1030,7 +1050,6 @@ export async function getResults(code: string, ctx: ResultsContext) {
   // answers or standings mid-run.
   const isHost = Boolean(ctx.hostToken && ctx.hostToken === s.hostToken);
   const over = isSessionOver(s);
-  const settings = await sessionSettings(s);
   const quiz = await db.query.quizzes.findFirst({
     where: eq(quizzes.id, s.quizId),
     with: {
@@ -1040,6 +1059,7 @@ export async function getResults(code: string, ctx: ResultsContext) {
       },
     },
   });
+  const settings = (quiz?.settings as QuizSettings) ?? {};
   let participantFinished = false;
   if (s.mode === "scheduled" && !over && ctx.clientToken) {
     const player = await getParticipant(s.id, ctx.clientToken);
@@ -1065,11 +1085,33 @@ export async function getResults(code: string, ctx: ResultsContext) {
     ((playerEnd || (s.mode === "live" && s.revealed)) &&
       canShowLeaderboard(settings, playerEnd));
 
-  const parts = await db
-    .select()
-    .from(participants)
-    .where(eq(participants.sessionId, s.id))
-    .orderBy(desc(participants.score), asc(participants.joinedAt));
+  const needStats = isHost || playerEnd;
+
+  const [parts, allAnswers] = await Promise.all([
+    db
+      .select({
+        id: participants.id,
+        nickname: participants.nickname,
+        teamName: participants.teamName,
+        avatarColor: participants.avatarColor,
+        avatarUrl: participants.avatarUrl,
+        score: participants.score,
+      })
+      .from(participants)
+      .where(eq(participants.sessionId, s.id))
+      .orderBy(desc(participants.score), asc(participants.joinedAt)),
+    needStats
+      ? db
+          .select({
+            questionId: answers.questionId,
+            optionId: answers.optionId,
+            textValue: answers.textValue,
+            numberValue: answers.numberValue,
+          })
+          .from(answers)
+          .where(eq(answers.sessionId, s.id))
+      : Promise.resolve([]),
+  ]);
 
   const leaderboard = showBoard
     ? parts.map((p, i) => ({
@@ -1082,11 +1124,6 @@ export async function getResults(code: string, ctx: ResultsContext) {
         rank: i + 1,
       }))
     : [];
-
-  const allAnswers = await db
-    .select()
-    .from(answers)
-    .where(eq(answers.sessionId, s.id));
 
   const byQuestion = new Map<string, typeof allAnswers>();
   for (const a of allAnswers) {
@@ -1159,20 +1196,36 @@ export async function exportCsv(
     throw new HttpError(403, "forbidden", "Host token required");
   }
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: { orderBy: asc(questions.position), with: { options: true } },
-    },
-  });
-  const parts = await db
-    .select()
-    .from(participants)
-    .where(eq(participants.sessionId, s.id));
-  const allAnswers = await db
-    .select()
-    .from(answers)
-    .where(eq(answers.sessionId, s.id));
+  const [quiz, parts, allAnswers] = await Promise.all([
+    db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      with: {
+        questions: { orderBy: asc(questions.position), with: { options: true } },
+      },
+    }),
+    db
+      .select({
+        id: participants.id,
+        nickname: participants.nickname,
+        teamName: participants.teamName,
+        score: participants.score,
+      })
+      .from(participants)
+      .where(eq(participants.sessionId, s.id)),
+    db
+      .select({
+        participantId: answers.participantId,
+        questionId: answers.questionId,
+        optionId: answers.optionId,
+        textValue: answers.textValue,
+        numberValue: answers.numberValue,
+        isCorrect: answers.isCorrect,
+        responseMs: answers.responseMs,
+        points: answers.points,
+      })
+      .from(answers)
+      .where(eq(answers.sessionId, s.id)),
+  ]);
 
   const partById = new Map(parts.map((p) => [p.id, p]));
   const qById = new Map((quiz?.questions ?? []).map((q) => [q.id, q]));

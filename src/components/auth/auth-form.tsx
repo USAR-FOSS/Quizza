@@ -15,6 +15,8 @@ const ERROR_TEXT: Record<string, string> = {
   oidc_token: "FOSSClub did not accept the sign-in. Please try again.",
   oidc_verify: "Could not verify the FOSSClub token.",
   oidc_error: "Something went wrong completing sign-in. Please try again.",
+  oidc_account_exists: "An account with this email already exists. Sign in with your password to link your FOSSClub account.",
+  oidc_account_conflict: "This email is already associated with another identity provider account.",
 };
 
 export function AuthForm({
