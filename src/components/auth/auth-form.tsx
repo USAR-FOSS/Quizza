@@ -14,6 +14,8 @@ const ERROR_TEXT: Record<string, string> = {
   oidc_nonce: "Sign-in could not be verified. Please try again.",
   oidc_token: "FOSSClub did not accept the sign-in. Please try again.",
   oidc_verify: "Could not verify the FOSSClub token.",
+  oidc_email_unverified: "FOSSClub must verify your email address before you can sign in here.",
+  oidc_account_conflict: "This email already belongs to another account. Use its original sign-in method or contact the instance operator.",
   oidc_error: "Something went wrong completing sign-in. Please try again.",
 };
 

@@ -50,7 +50,9 @@ advisory lock and applies migrations transactionally. Keep migrations compatible
 with the currently serving app where possible; defer destructive schema changes
 until old deployments are no longer serving traffic.
 
-For a hobby project, Preview can be used for UI/build checks without a database.
+Preview builds need a syntactically valid `DATABASE_URL` because server modules
+validate its presence during compilation; they do not apply migrations. A dummy
+local URL is sufficient for a build-only check, but not for serving database routes.
 If you want database-backed Preview tests, configure a separate Preview database
 and credentials; do not point Preview deployments at Production.
 
@@ -79,9 +81,14 @@ Vercel Production build; Preview builds are explicitly excluded.
 
 ## Local development
 
-`docker compose up --build` starts Postgres and Redis. The default `.env.local`
-uses `REALTIME_DRIVER=memory` for ordinary local work. To test Redis fan-out,
-set `REALTIME_DRIVER=redis` and `REDIS_URL=redis://localhost:6379`. To test
+`docker compose --env-file .env.local up --build` starts the app, Postgres, and
+Redis. Generate `AUTH_SECRET` with `openssl rand -hex 32` first. Compose requires
+this value and passes the optional OIDC and QStash settings to the app.
+
+For development outside Docker, `.env.example` defaults to
+`REALTIME_DRIVER=memory`. To test Redis fan-out from the host,
+run a separate Redis reachable from the host (Compose does not publish its Redis
+port), then set `REALTIME_DRIVER=redis` and its `REDIS_URL`. To test
 durable callbacks, provide a public `APP_URL` through a development tunnel and
 QStash credentials. Production rejects the memory driver. `pnpm db:migrate`
 loads `.env.local` and `.env` for local use; an explicitly supplied process

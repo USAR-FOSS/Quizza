@@ -1,5 +1,22 @@
 # Quiz experience and integrity update
 
+## Contributor-readiness and authentication changes
+
+- Upgrade Next.js and eslint-config-next to 16.4.1; the lockfile also updates Zod
+  to 4.6.7. These address the dependency advisories found during this audit.
+- Use Node 24 and pnpm 12.4.1. Docker installs pnpm explicitly.
+- Docker Compose now requires `AUTH_SECRET`; generate it with `openssl rand -hex 32`
+  and use `docker compose --env-file .env.local up --build`. Keep an existing
+  production secret stable to preserve sessions.
+- OIDC requires `email_verified: true` for email claims and RS256 ID tokens.
+  Automatic email-based account linking is removed. Email collisions return a
+  sign-in error instead of replacing a subject. Existing subject links remain;
+  review previously auto-linked accounts separately. Confirm provider claims
+  in a staging environment before deploying this change.
+- The same font families are bundled locally with SIL OFL notices. Builds no
+  longer depend on Google Fonts response formats or network availability.
+- No database migration is introduced by these changes.
+
 ## Deploying
 
 `pnpm dev` and Vercel Production builds apply pending migrations automatically.

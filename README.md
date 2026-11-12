@@ -52,43 +52,55 @@ The full set is indexed in [docs/README.md](docs/README.md). Key documents:
 
 ## Local development
 
+Use Node.js 24 and pnpm 12.4.1 (the version in `packageManager`). The migration
+runner executes TypeScript directly with Node, so older Node versions are not
+supported. Install pnpm with `npm install --global pnpm@12.4.1` if needed.
+
 ```bash
-pnpm install
-cp .env.example .env.local          # point DATABASE_URL at a Postgres
+git clone https://github.com/USAR-FOSS/Quizza.git
+cd Quizza
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+openssl rand -hex 32               # paste the output into AUTH_SECRET in .env.local
 
-# spin up a local Postgres:
+# Skip this if you already have a local Postgres on port 5432.
 docker run --name quizza-pg -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=quizza -p 5432:5432 -d postgres:16
+  -e POSTGRES_DB=quizza -p 127.0.0.1:5432:5432 -d postgres:16
 
-pnpm db:generate                    # SQL from the schema into drizzle/
-pnpm dev                            # applies migrations, then starts http://localhost:3000
+pnpm dev                          # applies checked-in migrations, then starts port 3000
 ```
 
-For local full-stack development, `docker compose up --build` also starts
-Redis. Set `REALTIME_DRIVER=redis` and use a public development URL plus QStash
-to exercise durable live reveals; otherwise the default local `memory` driver
-keeps ordinary UI work self-contained. Production rejects the memory driver.
+Open `/login`, choose **Create account**, then create a quiz from the dashboard.
+Add a prompt and options, mark a correct answer, and launch a live room. Join
+with its code in a separate browser profile. Hosts need accounts; anonymous
+players do not. `/demo` is available without signing in.
 
-Vercel deployments require a pooled `DATABASE_URL`, `REDIS_URL`,
-`REALTIME_DRIVER=redis`, `APP_URL`, and the QStash token/signing keys. Follow
-[docs/deployment.md](docs/deployment.md) before opening a live room.
+Do not run `db:generate` for a fresh checkout. Run it only when changing the
+schema, and include the generated SQL and metadata in your pull request.
 
-We use `db:generate` plus `db:migrate` rather than `db:push` because
-`drizzle-kit push` needs an interactive TTY. The migrator at
-`src/lib/db/migrate.ts` runs non-interactively.
+The default `REALTIME_DRIVER=memory` supports local live and scheduled play
+without Redis or QStash. Production requires Redis; publicly hosted production
+live rooms also require QStash and a reachable `APP_URL`. See
+[deployment](docs/deployment.md). Fonts and their licenses are bundled locally;
+builds do not download fonts.
 
 ## Run with Docker
 
-The whole stack (Postgres, a one-shot migration, then the app) runs with one
-command:
+After copying `.env.example` to `.env.local` and setting a generated
+`AUTH_SECRET`, run:
 
 ```bash
-docker compose up --build        # app on http://localhost:3000
+docker compose --env-file .env.local up --build
 ```
 
-The image is a multi-stage build of Next's standalone output, run as a non-root
-user. The `app` service waits for migrations to complete before starting. See
-[docs/sdd.md](docs/sdd.md) section 11 and ADR 0019 for the deployment design.
+This starts Postgres, Redis, a one-shot migration, and the app on
+`http://localhost:3000`. Compose uses internal database and Redis addresses and
+passes auth, OIDC, and QStash settings from the env file. It rejects a missing
+`AUTH_SECRET` before starting. The image runs as a non-root user.
+
+The localhost configuration uses in-process reveal timers for development.
+For public hosting, set `APP_URL` to your HTTPS origin and configure QStash
+credentials and signing keys. See [deployment](docs/deployment.md).
 
 ### Scripts
 
@@ -96,6 +108,8 @@ user. The `app` service waits for migrations to complete before starting. See
 |--------------------|------|
 | `pnpm dev`         | dev server |
 | `pnpm build`       | production build |
+| `pnpm test`      | unit and handler regression tests |
+| `pnpm lint`      | ESLint checks |
 | `pnpm typecheck`   | `tsc --noEmit` |
 | `pnpm db:generate` | generate SQL migrations from the schema |
 | `pnpm db:migrate`  | apply migrations (non-interactive) |
@@ -135,9 +149,20 @@ realtime under `src/lib`.
 the app. Other deployment targets should run `pnpm db:migrate` before `pnpm start`.
 Migrations 0003–0006 cover durable question views, image uploads,
 and the repeatable powerup/attack model. Migration 0007 adds participant team
-assignments; apply it before deploying team selection.
+assignments; migration 0008 adds roster email claims. Apply all pending migrations
+before deploying team selection or roster eligibility.
 See [upgrade notes](docs/upgrade.md) for API and behavior changes.
 
 ## License
 
-To be decided. Intended to be a permissive open-source license.
+Copyright 2026 Quizza contributors. Licensed under [Apache-2.0](LICENSE).
+Bundled fonts retain their [SIL OFL licenses](src/app/fonts/README.md).
+The project is maintained at [USAR-FOSS/Quizza](https://github.com/USAR-FOSS/Quizza).
+
+## Contributing
+
+Open Source Week contributions should target
+[USAR-FOSS/Quizza](https://github.com/USAR-FOSS/Quizza). Read
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, contribution levels, and the theme
+guide. Please follow our [Code of Conduct](CODE_OF_CONDUCT.md) and report
+vulnerabilities privately using [SECURITY.md](SECURITY.md).
