@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Direction RFC
+    url: https://github.com/USAR-FOSS/Quizza/discussions/53
+    about: Discuss priorities and larger product changes.
+  - name: Setup questions and design discussions
+    url: https://github.com/USAR-FOSS/Quizza/discussions
+    about: Ask for help or agree on a design before opening implementation work.
+  - name: Private security reporting
+    url: https://github.com/USAR-FOSS/Quizza/blob/main/SECURITY.md
+    about: Use the private reporting instructions for vulnerabilities and sensitive data.

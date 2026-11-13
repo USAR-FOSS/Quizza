@@ -1,79 +1,101 @@
 # Contributing to Quizza
 
-Open Source Week issues and pull requests go to
-[USAR-FOSS/Quizza](https://github.com/USAR-FOSS/Quizza). Fork the repository,
-create a branch in your fork, and open your pull request against upstream `main`.
-Claim an issue with a short approach before starting. Contact
-siddharthb@fossunited.org if you need help choosing a task.
+All issues, discussions, and pull requests belong in
+[USAR-FOSS/Quizza](https://github.com/USAR-FOSS/Quizza). Push branches to your own
+fork and target upstream `main` when opening a PR.
 
-## Start here
+## 1. Choose a task
 
-Follow the [README setup](README.md#local-development): Node 24, pnpm 12.4.1,
-Postgres, and `.env.local`. Email/password accounts work without OIDC. Redis and
-QStash are unnecessary for the default local development mode. Run `/demo`,
-then create an account and a small live quiz.
+| Starting point | What to expect |
+| --- | --- |
+| [Good first issues](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue) | A bounded change with concrete starting files and checks |
+| [Intermediate](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3Aintermediate) | A feature or integration across a few parts of the app |
+| [Complex](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3Acomplex) | Persistence, identity, realtime, or architecture work |
+| [Documentation](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3Adocumentation) | Guides, reproducible examples, and operational knowledge |
+| [Design required](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22design%20required) | Agree on behavior and failure cases before implementation |
 
-Read [AGENTS.md](AGENTS.md). Before changing Next.js code, read the relevant
-installed guide under `node_modules/next/dist/docs/`; this version has breaking
-changes. Avoid copying examples for older versions.
+Read the acceptance criteria and linked dependencies. Check open PRs for overlap,
+then comment with your intended scope and how you will verify it. Pick one task
+at a time. For a small well-defined issue, the issue discussion is enough; larger
+policy or architecture changes start with a focused Discussion linked to the issue.
 
-## Choose a contribution
+The [direction RFC](https://github.com/USAR-FOSS/Quizza/discussions/53) and
+[milestones](https://github.com/USAR-FOSS/Quizza/milestones) explain priorities.
+An idea can be valuable without belonging in the current PR.
 
-| Level | Good scope | Expected evidence |
-| --- | --- | --- |
-| Good first | One empty state, keyboard interaction, docs fix, or agreed theme | Reproduction or screenshots; keyboard check |
-| Intermediate | Question duplication, option ordering, QR joining, upload cleanup | Manual flow and focused regression coverage |
-| Complex | Immutable session snapshots, scheduling, concurrency | Agreed design, migrations and failure behavior |
-| Security | Auth, tokens, rate limits, uploads | Private report for vulnerabilities; regression proving the boundary |
-| Docs | Self-hosting, player guides, API examples | Execute the commands or requests documented |
+## 2. Fork and run the app
 
-Claim one task with a short approach before working. Keep changes small enough
-to review. Do not include build output, secrets, unrelated formatting, or
-planning/backlog documents in a PR.
-
-## Theme contributions
-
-Agree on a distinct palette first. Theme keys live in `src/lib/quiz-constants.ts`
-(`THEMES`), room colors in `src/components/live/room-theme.tsx`, and global tokens
-in `src/app/globals.css`. Keep Tailwind utility names literal so the build detects
-them. Preserve existing keys stored in quiz records.
-
-1. Add one key, readable name, and picker swatch.
-2. Define accent, paper, and surface colors with readable text and visible focus.
-   Check WCAG AA text contrast using a contrast checker.
-3. Check the picker, preview, host lobby, player question, reveal, and results
-   on desktop and mobile. Distinguish answer states with text or icons too.
-4. Attach screenshots and record keyboard and reduced-motion checks. Keep
-   scoring and unrelated palettes unchanged.
-
-## Validate a change
+Fork USAR-FOSS/Quizza on GitHub, then use your fork's clone URL:
 
 ```bash
-pnpm test
-pnpm typecheck
-pnpm lint
-pnpm build
+git clone https://github.com/YOUR_USERNAME/Quizza.git
+cd Quizza
+git remote add upstream https://github.com/USAR-FOSS/Quizza.git
+git fetch upstream
+git switch -c feat/ISSUE-short-description upstream/main
 ```
 
-Tests use mocks and need no database. Build requires a `DATABASE_URL`; fonts
-are bundled locally. Outside Vercel Production it does not migrate the database.
-Do not set `VERCEL_ENV=production` for routine build checks: it runs migrations.
+Continue with [local setup](docs/development.md#local-setup). Complete the
+[two-browser smoke check](docs/development.md#first-smoke-check) before changing
+runtime behavior. You can work on docs without setting up a database, but execute
+any setup or API commands you change before claiming they work.
 
-For behavior changes, reproduce the flow in separate host and player browser
-profiles. For realtime changes, use the two-instance check in
-[the runbook](docs/runbooks/realtime.md) with a test database and throwaway rooms.
-Add tests for logic and authorization changes; screenshots and manual checks
-are enough for simple visual changes.
+Read [AGENTS.md](AGENTS.md). For Next.js changes, read the relevant guide in
+`node_modules/next/dist/docs/` before coding; this version has breaking changes.
 
-Schema changes need `pnpm db:generate`, checked-in SQL and metadata, and a fresh
-migration check. Never run `db:push` against shared or production databases.
+## 3. Open the right guide
 
-## Pull requests
+The [documentation map](docs/README.md#find-the-right-reference) routes you by
+area: authoring, sessions, auth, teams, API, data, or deployment.
 
-Describe the problem, resulting behavior, and validation. Note migrations,
-configuration changes, and limitations. Use plain language, no emojis or em
-dashes in code, comments, docs, or commit messages. Preserve attribution; do not
-add an automated co-author trailer. Follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+- Adding a palette: use the [theme guide](docs/contributing/themes.md).
+- Changing schema: follow the [database workflow](docs/development.md#database-changes)
+  and update the [data dictionary](docs/data-dictionary.md).
+- Changing API behavior: keep handlers, [schemas](src/lib/api/schemas.ts),
+  [OpenAPI](src/lib/api/openapi.ts), and client types in agreement.
+- Changing identity, visibility, or tokens: read the [threat model](docs/threat-model.md).
+  Report an actual vulnerability privately through [SECURITY.md](SECURITY.md).
+- Changing realtime: use the [runbook](docs/runbooks/realtime.md), including
+  cross-instance and recovery checks.
 
-Contributions use the repository's [Apache-2.0 license](LICENSE). Submit only
-work you have the right to contribute and retain third-party license notices.
+## 4. Validate the change
+
+Use the [validation checklist](docs/development.md#validation). Add regression
+coverage for changed logic and authorization; use screenshots and keyboard checks
+for small visual changes. Do not add tests that only repeat implementation details.
+For docs-only changes, verify links, terminology, and any commands or examples you
+changed. Explain checks you could not run.
+
+Use plain language. Do not add emojis or em dashes to code, comments, docs, or
+commit messages. Preserve attribution and third-party notices. Do not include
+secrets, build output, unrelated formatting, or local planning/backlog artifacts.
+
+## 5. Open the pull request
+
+Commit the focused change and push your branch to your fork:
+
+```bash
+git push -u origin HEAD
+```
+
+Open a PR with base **USAR-FOSS/Quizza:main** and your fork branch as the head.
+Link the issue, explain the user-visible result, and record validation. Use
+`Closes #NUMBER` only when the whole issue is complete; otherwise use `Refs #NUMBER`.
+Describe migrations, configuration changes, compatibility, and limitations that
+reviewers need to assess. Use a draft PR when you want feedback before completion.
+
+Respond to review in the same PR. Resolve the agreed scope before taking another
+task. Maintainers merge after review; a Vercel preview authorization request is
+not a reason to publish secrets or change deployment settings.
+
+## Questions and conduct
+
+Use [Discussions](https://github.com/USAR-FOSS/Quizza/discussions) for questions
+and proposals, and issues for reproducible bugs or agreed work. If you are unsure
+where to start, ask on an issue or contact siddharthb@fossunited.org.
+Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Contributions use [Apache-2.0](LICENSE). Submit work you have the right to
+contribute. You can begin directly with Quizza; Open Source Week's broader
+Dimsee → Quizza → sedim path is an optional learning progression, not a dependency
+between the codebases.

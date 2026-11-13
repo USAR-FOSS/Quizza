@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible problem in an existing workflow.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For vulnerabilities or private participant data, follow SECURITY.md instead of posting publicly.
+        Search existing issues and open PRs before reporting the same problem.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened, and what did you expect?
+      description: Describe the affected host, player, operator, or contributor workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use a small fictional quiz or test account. Include live/scheduled mode and relevant settings.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or version, Node/pnpm versions, browser/OS, and local/Docker/hosted deployment as relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Errors, logs, or screenshots. Remove cookies, tokens, connection strings, emails, and real participant data.
