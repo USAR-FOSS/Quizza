@@ -56,7 +56,7 @@ TLS.
 |--------|--------|------------|--------|
 | Impersonate a host and control a session | Guess or steal `host_token` | 32-char high-entropy token (nanoid), returned only once at creation, never exposed by any read endpoint | Done |
 | Impersonate another participant | Guess `client_token` | 32-char high-entropy token; unique per session and participant | Done |
-| Fake host identity at sign-in | Forged OIDC assertion | Authorization code flow with PKCE (S256), state and nonce, RS256 ID token verified against JWKS with issuer/audience/nonce checks, client_secret_basic token auth | Code-complete; live pending provider client registration (0012) |
+| Fake host identity at sign-in | Forged OIDC assertion | Authorization code flow with PKCE (S256), state and nonce, RS256 ID token verified against JWKS with issuer/audience/nonce checks, client_secret_basic token auth | Code-complete; provider integration needs deployment testing |
 | Join code guessing to enter a room | Six-digit code | Codes grant only participant actions, never host control; distributed Redis rate limiting applies across instances | Mitigated; capacity testing open |
 
 ### Tampering
@@ -64,10 +64,10 @@ TLS.
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
 | Inflate own score | Submit points or correctness from the client | Server computes correctness from stored options and points from `scoring.ts`; the client cannot set either | Done |
-| Game the speed bonus | Report a tiny `elapsedMs` in scheduled mode | Value is clamped to `[0, timeLimit]`; live mode ignores it and uses the server clock. Server-issued per-question view token with a timestamp is the authoritative fix | Partial, token Planned |
+| Game the speed bonus | Report a tiny `elapsedMs` in scheduled mode | Persistent first-view timestamps and signed per-question view tokens make scheduled timing authoritative; live mode uses the server clock | Done |
 | Submit to a question that is not live | Post to an arbitrary question id | Live mode checks `current_question_id`; scheduled mode checks the open window; question must belong to the quiz | Done |
 | Answer a question twice | Repeat submission | Unique index `(question_id, participant_id)` returns 409 | Done |
-| Modify quiz content you do not own | Edit another host's quiz | Ownership checks once host auth lands; pre-release a quiz link grants edit access | Planned (0015 dependency) |
+| Modify quiz content you do not own | Edit another host's quiz | Signed-in ownership checks on quiz, question, and option actions; edits locked during active sessions | Done |
 
 ### Repudiation
 
@@ -80,11 +80,11 @@ TLS.
 
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
-| Learn correct answers before reveal | Read the questions endpoint | `GET /questions` strips `is_correct`; correctness is only returned on a participant's own submit and in results | Done |
+| Learn correct answers before reveal | Read the questions endpoint | `GET /questions` strips `is_correct`; participant feedback and results follow reveal policies | Done |
 | Read the host token | Inspect session info | `GET /sessions/{code}` never returns `host_token`; it is only in the create response | Done |
 | See other participants' answers | Enumerate answers | No endpoint exposes per-participant answers to participants; results are aggregates and the leaderboard | Done |
-| Leak host PII | Access user records | No endpoint returns user records to participants; host data is only in host-scoped views | Planned (with auth) |
-| Enumerate quizzes or sessions by id | Guess UUIDs | UUID v4 identifiers are not enumerable; sensitive reads will be ownership-checked | Partial |
+| Leak host PII | Access user records | No endpoint returns user records to participants; host data is only in host-scoped views | Done |
+| Enumerate quizzes or sessions by id | Guess UUIDs | Owner checks protect draft/builder reads; run results follow session reveal policies | Done for current routes |
 
 ### Denial of service
 
@@ -103,7 +103,7 @@ TLS.
 
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
-| Participant performs host actions | Call host-only endpoints | Host endpoints require the `host_token`; participant tokens cannot control a session | Done for current endpoints, enforced as live-control endpoints land |
+| Participant performs host actions | Call host-only endpoints | Host endpoints require the `host_token`; participant tokens cannot control a session | Done for current endpoints |
 | Host acts as admin | Call admin functions | Role-based checks (`users.role`), admin recovery path separated from normal host flows | Planned |
 | Cross-session access | Use a token from another session | Tokens are scoped to a session; participant lookups are keyed by `(session_id, client_token)` | Done |
 
@@ -116,9 +116,8 @@ The PRD calls out cheat prevention as desirable. Vectors and responses:
   inspect-the-response cheat.
 - Score or correctness forgery: scoring is server-authoritative (Tampering,
   Done).
-- Timing manipulation in scheduled mode: `elapsedMs` is clamped now; a
-  server-issued, signed per-question view token with a server timestamp would
-  make response time authoritative (Planned).
+- Timing manipulation in scheduled mode: persistent server timestamps and signed
+  view tokens prevent timer resets and client-clock forgery (Done).
 - Multiple identities: an explicitly anonymous participant can rejoin under a
   new nickname. One-per-device (the default) blocks another attempt while its
   cookie persists, but a cleared cookie or another device bypasses it.
@@ -137,15 +136,17 @@ The PRD calls out cheat prevention as desirable. Vectors and responses:
 - TLS everywhere; HTTP/2 at the proxy for SSE multiplexing.
 - Secrets in environment variables, never in the client bundle or the repo
   (`.env.local` is gitignored).
-- Security headers (CSP, frame options, referrer policy) to be set at the app or
-  proxy (Planned).
+- Frame, content-type, referrer, and permissions headers are configured in
+  `next.config.ts`. A site-wide CSP remains planned.
 - Dependency hygiene: lockfile pinned; periodic audit.
 
 ## 6. Prioritized follow-ups
 
-1. Host auth (OIDC and email/password) with ownership and role checks. Unlocks
-   several Planned items above.
-2. Rate limiting on join, session-info, and submit endpoints.
-3. Server-issued per-question view token for authoritative scheduled timing.
-4. Security headers and body-size limits at the edge.
-5. Host-action audit log.
+1. Local email verification, password recovery, session revocation, and explicit
+   authenticated account linking. OIDC now rejects unverified email claims and
+   never links separate accounts merely by matching email. Review historical links.
+2. Trusted proxy configuration for rate-limit IPs, per-stream limits, and failure
+   behavior during Redis outages.
+3. Session snapshots and immutable archival identifiers.
+4. Site-wide CSP and bounded JSON request bodies.
+5. Host-action audit log and moderation controls.

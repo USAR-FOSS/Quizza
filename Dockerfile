@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# Base image with pnpm available via corepack.
+# Base image with the same pnpm version as package.json.
 FROM node:24-alpine AS base
 # libc6-compat helps Next's native binaries run on alpine (musl).
 RUN apk add --no-cache libc6-compat
-RUN corepack enable
+# Install the project-pinned package manager explicitly.
+RUN npm install --global pnpm@12.4.1
 WORKDIR /app
 
 # Install all dependencies (including dev, needed to build).
@@ -40,6 +41,8 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/LICENSE ./LICENSE
+COPY --from=builder --chown=nextjs:nodejs /app/src/app/fonts/licenses ./licenses/fonts
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]

@@ -2,6 +2,10 @@
   "name": "quizza",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "pnpm db:migrate && next dev",
     "build": "node scripts/vercel-build.mjs",
@@ -25,25 +29,25 @@
     "lucide-react": "^1.55.0",
     "motion": "^14.1.0",
     "nanoid": "^6.0.2",
-    "next": "16.4.0",
+    "next": "16.4.1",
     "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "redis": "^6.3.0",
     "tailwind-merge": "^3.7.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.7",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.3"

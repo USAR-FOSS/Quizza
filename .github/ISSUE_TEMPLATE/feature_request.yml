@@ -1,0 +1,41 @@
+name: Feature or improvement
+description: Propose a concrete workflow improvement with an observable outcome.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the direction RFC at https://github.com/USAR-FOSS/Quizza/discussions/53 and search existing issues first.
+        Larger architecture or policy changes should have a focused Discussion before implementation.
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Who needs this, and what are they trying to do?
+      description: Describe a real workflow and its current difficulty.
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Which direction does this support?
+      options:
+        - Reliable events
+        - Self-hosting and operations
+        - Classroom assignments and feedback
+        - Audience participation
+        - Integrations and portability
+        - Unsure, needs discussion
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome and acceptance criteria
+      description: Explain observable behavior, boundaries, and how someone would verify success.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Related issues, design, and alternatives
+      description: Link existing work and note identity, privacy, migration, or operational implications.

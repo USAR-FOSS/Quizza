@@ -1,46 +1,58 @@
-# quizza documentation
+# Quizza documentation
 
-The documentation set for quizza, organized along the software lifecycle phases
-from [strat.md](../strat.md). This page is the map; each document is the detail.
+Choose a guide for the task in front of you. You do not need to read the full
+architecture specification before making a focused contribution.
 
-## The set
+## Entry points
 
-| Document | Phase | Purpose | Status |
-|----------|-------|---------|--------|
-| [PRD.md](../PRD.md) | Discovery and strategy | Product vision, personas, use cases, functional and non-functional requirements. | Living |
-| [sdd.md](./sdd.md) | Architecture and design | System Design Document: C4 diagrams, components, workflows, data flows, non-functional requirements, deployment. | Living |
-| [decisions.md](./decisions.md) | Architecture and design | Architecture Decision Records: sequential log of significant choices with context and status. | Living |
-| [threat-model.md](./threat-model.md) | Architecture and design | STRIDE security analysis mapped onto the architecture, with mitigations and status. | Living |
-| [data-dictionary.md](./data-dictionary.md) | Architecture and design | Schema design: every table, column, type, constraint, index, and relationship, plus JSONB sub-schemas. | Living |
-| [deployment.md](./deployment.md) | Operations | Provider setup, environment variables, rollout, and rollback. | Living |
-| [runbooks/realtime.md](./runbooks/realtime.md) | Operations | Realtime health checks, failure response, and load-test procedure. | Living |
-| [realtime-scale-plan.md](./realtime-scale-plan.md) | Architecture and operations | Ordered implementation and acceptance plan for multi-instance live play. | Living |
-| OpenAPI (`/api/v1/openapi.json`, UI at `/docs`) | Support and operations | API reference for the runtime and play surface, generated from the zod schemas. | Generated |
+| Your goal | Start here | Next |
+| --- | --- | --- |
+| First contribution | [CONTRIBUTING](../CONTRIBUTING.md) | [Local setup](development.md#local-setup), then your issue's files |
+| Run or debug locally | [Development setup](development.md) | [Troubleshooting](development.md#troubleshooting) |
+| Self-host a public event | [Deployment](deployment.md) | [Realtime operations](runbooks/realtime.md) and [upgrades](upgrade.md) |
+| Understand the product direction | [Direction RFC](https://github.com/USAR-FOSS/Quizza/discussions/53) | [Milestones](https://github.com/USAR-FOSS/Quizza/milestones) and [current gaps](gaps.md) |
+| Report a sensitive issue | [Security policy](../SECURITY.md) | Private maintainer contact |
 
-## How to read it
+## Find the right reference
 
-- New to the project: start with the [PRD](../PRD.md) for the why, then the
-  [SDD](./sdd.md) for the how.
-- Making a significant technical choice: append an entry to
-  [decisions.md](./decisions.md). Do not rewrite past entries; supersede them.
-- Changing the database: update `src/lib/db/schema.ts`, regenerate the migration,
-  then reflect the change in [data-dictionary.md](./data-dictionary.md).
-- Changing the API: the zod schemas in `src/lib/api/schemas.ts` drive both
-  validation and the OpenAPI document, so the reference updates itself. Keep the
-  route list in `src/lib/api/openapi.ts` in step with the handlers.
-- Adding a feature with a security surface: check it against
-  [threat-model.md](./threat-model.md) and add threats or mitigations.
+| Area | Guide or contract | Code entry points |
+| --- | --- | --- |
+| Themes and visual changes | [Theme guide](contributing/themes.md) | `src/lib/quiz-constants.ts`, `src/components/live/room-theme.tsx`, `src/app/globals.css` |
+| Quiz authoring | [System design](sdd.md), [current capabilities](gaps.md) | `src/components/builder/`, `src/lib/actions/quiz.ts`, `src/lib/quiz-access.ts` |
+| Live and scheduled play | [System design](sdd.md), [realtime runbook](runbooks/realtime.md) | `src/lib/sessions.ts`, `src/lib/realtime/`, `src/components/live/` |
+| Scoring and powerups | [Design decisions](decisions.md) and adjacent tests | `src/lib/scoring.ts`, `src/lib/powerups.ts`, `src/lib/realtime/settlement.ts` |
+| Accounts and OIDC | [OIDC setup](oidc.md), [threat model](threat-model.md) | `src/lib/auth.ts`, `src/lib/actions/auth.ts`, `src/app/api/v1/auth/oidc/` |
+| Team eligibility | [Team roster behavior](team-roster.md) | `src/lib/teams.ts`, `src/lib/sessions.ts`, `src/components/live/team-picker.tsx` |
+| Database and migrations | [Data dictionary](data-dictionary.md), [database workflow](development.md#database-changes) | `src/lib/db/schema.ts`, `src/lib/db/schema-types.ts`, `drizzle/` |
+| HTTP API | Runtime `/docs` and `/api/v1/openapi.json` | `src/lib/api/schemas.ts`, `src/lib/api/openapi.ts`, `src/lib/api-client.ts`, `src/app/api/v1/` |
+| Deployment and recovery | [Deployment](deployment.md), [runbook](runbooks/realtime.md), [upgrade notes](upgrade.md) | `Dockerfile`, `docker-compose.yml`, `scripts/vercel-build.mjs` |
+| Capacity | [Scale plan](realtime-scale-plan.md), [load procedure](runbooks/realtime.md#load-test) | `scripts/load/`, `scripts/integration/two-instance.mjs` |
 
-## Diagrams
+## Architecture and history
 
-Diagrams use Mermaid and render in GitHub and most Markdown viewers. The SDD
-carries the C4 context, container, and component views plus sequence and state
-diagrams; the data dictionary carries the entity relationship diagram; the threat
-model carries the trust-boundary diagram.
+- [PRD](../PRD.md): the original campus-focused product intent and requirements.
+- [System Design Document](sdd.md): architecture, data flows, and diagrams.
+- [Architecture decisions](decisions.md): recorded choices and their context.
+- [Threat model](threat-model.md): security boundaries and remaining work.
+- [Data dictionary](data-dictionary.md): tables, constraints, and JSON settings.
+- [Current gaps](gaps.md): what is implemented and what is still limited.
+- [Upgrade notes](upgrade.md): migrations and behavior changes for operators.
 
-## Not yet written
+The RFC and issue milestones organize proposed future work. They do not mean a
+feature is implemented. PR descriptions identify changes still awaiting review;
+current source and tests are the implementation reference. The historical
+[software lifecycle outline](../strat.md) is background reading, not an onboarding
+prerequisite.
 
-These become relevant as the project matures (see strat.md for the full
-lifecycle): release and deployment plan, master test plan, runbooks, disaster
-recovery plan, and end-user documentation. They are intentionally deferred until
-there is something to operate and ship.
+## Keep the path useful
+
+Link new guides from the relevant row above. Keep setup commands in
+[development.md](development.md) and deployment instructions in
+[deployment.md](deployment.md) rather than copying them into every document.
+Schema changes should update the data dictionary; behavior changes should update
+upgrade notes when operators need to act. Supersede architecture decisions with
+new entries instead of rewriting their history.
+
+End-user guides, backup rehearsal, and API examples have their own
+[documentation issues](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3Adocumentation).
+They are work to complete, not links to documents that do not yet exist.

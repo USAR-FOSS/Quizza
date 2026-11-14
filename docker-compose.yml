@@ -1,5 +1,5 @@
 # Runs the whole stack: Postgres, a one-shot migration, then the app.
-# Usage: docker compose up --build
+# Usage: docker compose --env-file .env.local up --build
 # The app will be on http://localhost:3000
 
 services:
@@ -50,7 +50,15 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/quizza
       REDIS_URL: redis://redis:6379
       REALTIME_DRIVER: redis
-      APP_URL: http://localhost:3000
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env.local and pass --env-file .env.local}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      QSTASH_TOKEN: ${QSTASH_TOKEN:-}
+      QSTASH_CURRENT_SIGNING_KEY: ${QSTASH_CURRENT_SIGNING_KEY:-}
+      QSTASH_NEXT_SIGNING_KEY: ${QSTASH_NEXT_SIGNING_KEY:-}
+      INTERNAL_HEALTH_SECRET: ${INTERNAL_HEALTH_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://oidc.fossclub.tech}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       NODE_ENV: production
     depends_on:
       db:

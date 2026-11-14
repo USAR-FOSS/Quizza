@@ -1,143 +1,68 @@
-# quizza
+# Quizza
 
-An open-source, no-login-needed live quiz and polling platform. A FOSS
-alternative to Mentimeter. Build a quiz, share a room code, and let everyone play
-from their phones. Built to self-host.
+Self-hosted live quizzes and polls for clubs, classrooms, and community events.
+Hosts create a quiz, share a room code, and let everyone join from their phones.
+Players can join without accounts when the host allows it. Hosts need an account.
 
-Status: live and scheduled play, host accounts, quiz authoring, results, and
-exports are implemented. The interface includes a playable demo, Quip the quiz
-mascot, responsive layouts, accessible loading/error states, and reduced-motion
-support. See [the current gaps](docs/gaps.md) for remaining work.
+## Start here
 
-## What it does
+| I want to... | Go to |
+| --- | --- |
+| Run Quizza locally and try a quiz | [Development setup](docs/development.md) |
+| Make a contribution | [Contributing](CONTRIBUTING.md) |
+| Host a real event | [Deployment](docs/deployment.md), then the [realtime runbook](docs/runbooks/realtime.md) |
+| Understand the direction | [Direction RFC](https://github.com/USAR-FOSS/Quizza/discussions/53) and [milestones](https://github.com/USAR-FOSS/Quizza/milestones) |
+| Find a technical reference | [Documentation map](docs/README.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
 
-- Hosts build a quiz: multiple choice, true or false, poll, word cloud, scale,
-  and open text questions.
-- A quiz can run in two modes:
-  - Live: host-driven, everyone synced to the same question.
-  - Scheduled: open for a set window, taken self-paced.
-- Players join with a nickname. No account required.
-- Hosts can enable team selection, import up to 5,000 deduplicated team names
-  from CSV, and limit each team to 1–4 players. Players search for a team when joining.
-- Answers record accuracy and response time. Scoring rewards speed and accuracy,
-  with a leaderboard.
-- Hosts sign in through email/password or configured FOSSClub OIDC, own their
-  quizzes, and revisit sessions from their dashboard.
-  Anonymous play stays first-class.
+## What works today
 
-## Documentation
+- Six question types: multiple choice, true or false, poll, word cloud, scale,
+  and open text.
+- Live host-led rooms and scheduled self-paced sessions.
+- Quiz authoring, themes, question media, team rosters, and configurable powerups.
+- Email/password host accounts and optional FOSSClub OIDC sign-in.
+- Server-timed scoring, reconnect recovery, reveal and leaderboard policies,
+  and CSV/JSON results.
+- A playable local `/demo` and owner-only quiz previews.
 
-The full set is indexed in [docs/README.md](docs/README.md). Key documents:
+See [current capabilities and limits](docs/gaps.md) for detail. The concurrency
+numbers in the PRD are targets, not measured capacity claims. Roster email lookup
+is not proof of email ownership, and scheduled play is not proctoring.
 
-- [docs/sdd.md](docs/sdd.md): System Design Document (C4 diagrams, workflows,
-  non-functional requirements, deployment).
-- [docs/decisions.md](docs/decisions.md): Architecture Decision Records.
-- [docs/threat-model.md](docs/threat-model.md): STRIDE threat model.
-- [docs/data-dictionary.md](docs/data-dictionary.md): schema design.
-- The HTTP API is documented with OpenAPI 3.1. The spec is at
-  `/api/v1/openapi.json` and a browsable UI (Scalar) is at `/docs`. The spec is
-  generated from the same zod schemas the handlers validate against.
+## Run it
 
-## Stack
+Use **Node 24**, **pnpm 12.4.1**, and **Postgres**. The default local mode does not
+need Redis, QStash, or OIDC credentials.
 
-| Area       | Choice                      | Notes |
-|------------|-----------------------------|-------|
-| Framework  | Next.js 16 (App Router)     | React 19, server components, streaming |
-| Language   | TypeScript                  | |
-| Styling    | Tailwind CSS v4             | theme tokens in CSS |
-| Animation  | motion (Framer Motion)      | respects reduced-motion |
-| ORM / DB   | Drizzle + Postgres          | pure TS, no native engine (works on NixOS) |
-| Validation | zod                         | shared by forms, actions, and the API |
-| Realtime   | SSE + Redis Pub/Sub + QStash | cross-instance fan-out and durable live reveals |
+Follow [the setup guide](docs/development.md#local-setup) for clone, environment,
+database, and start commands. It also covers
+[Docker](docs/development.md#docker), a two-browser smoke check, and common setup
+errors. Fonts are bundled locally, so builds do not download them.
 
-## Local development
+The application uses Next.js 16 / React 19, TypeScript, Tailwind CSS, Drizzle and
+Postgres. Production realtime uses Redis and QStash. Read
+[deployment requirements](docs/deployment.md) before opening a public room.
 
-```bash
-pnpm install
-cp .env.example .env.local          # point DATABASE_URL at a Postgres
+## Contribute during Open Source Week
 
-# spin up a local Postgres:
-docker run --name quizza-pg -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=quizza -p 5432:5432 -d postgres:16
+The path is **README → [CONTRIBUTING](CONTRIBUTING.md) → an issue → the relevant
+[guide](docs/README.md) → a focused pull request**.
 
-pnpm db:generate                    # SQL from the schema into drizzle/
-pnpm dev                            # applies migrations, then starts http://localhost:3000
-```
+Start with [good first issues](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue) or browse the
+[full contributor backlog](https://github.com/USAR-FOSS/Quizza/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted).
+Each task has a difficulty, topic, acceptance criteria, and milestone. Comment
+with your approach before starting. Pull requests and issues belong in
+**USAR-FOSS/Quizza**; push your branch to your own fork.
 
-For local full-stack development, `docker compose up --build` also starts
-Redis. Set `REALTIME_DRIVER=redis` and use a public development URL plus QStash
-to exercise durable live reveals; otherwise the default local `memory` driver
-keeps ordinary UI work self-contained. Production rejects the memory driver.
+Our direction is reliable events and self-hosting first, classroom assignments
+and feedback next, then broader participation and integrations. The
+[RFC](https://github.com/USAR-FOSS/Quizza/discussions/53) explains the ordering
+and invites feedback. Milestones are capabilities, not release-date promises.
 
-Vercel deployments require a pooled `DATABASE_URL`, `REDIS_URL`,
-`REALTIME_DRIVER=redis`, `APP_URL`, and the QStash token/signing keys. Follow
-[docs/deployment.md](docs/deployment.md) before opening a live room.
-
-We use `db:generate` plus `db:migrate` rather than `db:push` because
-`drizzle-kit push` needs an interactive TTY. The migrator at
-`src/lib/db/migrate.ts` runs non-interactively.
-
-## Run with Docker
-
-The whole stack (Postgres, a one-shot migration, then the app) runs with one
-command:
-
-```bash
-docker compose up --build        # app on http://localhost:3000
-```
-
-The image is a multi-stage build of Next's standalone output, run as a non-root
-user. The `app` service waits for migrations to complete before starting. See
-[docs/sdd.md](docs/sdd.md) section 11 and ADR 0019 for the deployment design.
-
-### Scripts
-
-| Script             | Does |
-|--------------------|------|
-| `pnpm dev`         | dev server |
-| `pnpm build`       | production build |
-| `pnpm typecheck`   | `tsc --noEmit` |
-| `pnpm db:generate` | generate SQL migrations from the schema |
-| `pnpm db:migrate`  | apply migrations (non-interactive) |
-| `pnpm db:push`     | push schema straight to the DB (needs a TTY) |
-| `pnpm db:studio`   | Drizzle Studio (DB browser) |
-
-## Project layout
-
-See [docs/sdd.md](docs/sdd.md) for the full design. In short:
-routes under `src/app`, UI under `src/components`, and data, actions, and
-realtime under `src/lib`.
-
-## Roadmap
-
-- [x] Design system and landing page
-- [x] Data model: quizzes, questions, options, sessions, participants, answers
-- [x] Quiz builder: six question types, options, reordering, themes, autosave
-- [x] REST API under `/api/v1` with OpenAPI docs (spec at `/api/v1/openapi.json`, UI at `/docs`)
-- [x] Scheduled mode, end to end: host launch (`/present/[quizId]`), anonymous player (`/play/[code]`) with timing and accuracy, and results (`/results/[code]`)
-- [x] Live mode: presenter (`/host/[code]`) and player over SSE, room code, live reveal and leaderboard
-- [x] Host sign-in (email/password + FOSSClub OIDC flow), quiz ownership, my-quizzes dashboard (`/dashboard`)
-- [x] Configurable Double up, Safety net, Shield, and Attack powerups; direct HTTPS image/video/audio questions
-- [x] Shared server-timed live reveals, explicit player lock-in, private pre-reveal results
-- [x] Image/cover/icon/player-photo uploads, avatar-bubble lobbies, six room palettes
-- [x] 100-point defaults, quiz-wide speed scoring, viewport-safe question picker
-- [x] Authoring ownership checks, durable server timers, deadline enforcement, atomic scoring
-- [x] Results export: host CSV with spreadsheet-formula protection, JSON result summaries
-- [x] Searchable quiz library, quiz duplication, recent sessions, early session ending, host recovery
-- [x] Live word clouds, open-text reveals, configured scale ranges and averages
-- [x] Interactive demo and owner-only draft preview, illustrated loading/error states, responsive interface and reduced motion
-- [ ] Question/option duplication and reordering polish
-- [ ] Host QR codes, question pause/extend, participant moderation and capacity controls
-- [x] Shared Redis realtime/rate-limit backend and durable live reveal scheduler
-- [ ] Load testing and measured capacity at the PRD's full concurrency target
-
-`pnpm dev` and Vercel Production builds apply pending migrations before starting
-the app. Other deployment targets should run `pnpm db:migrate` before `pnpm start`.
-Migrations 0003–0006 cover durable question views, image uploads,
-and the repeatable powerup/attack model. Migration 0007 adds participant team
-assignments; apply it before deploying team selection.
-See [upgrade notes](docs/upgrade.md) for API and behavior changes.
+Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-To be decided. Intended to be a permissive open-source license.
+Copyright 2026 Quizza contributors. Licensed under [Apache-2.0](LICENSE).
+Bundled fonts retain their [SIL OFL licenses](src/app/fonts/README.md).

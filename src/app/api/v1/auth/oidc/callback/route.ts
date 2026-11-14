@@ -63,7 +63,11 @@ export async function GET(req: NextRequest) {
     const jwks = createRemoteJWKSet(new URL(`${issuer}/jwks`));
     let claims: Record<string, unknown>;
     try {
-      const { payload } = await jwtVerify(tokens.id_token, jwks, { issuer, audience: clientId });
+      const { payload } = await jwtVerify(tokens.id_token, jwks, {
+        issuer,
+        audience: clientId,
+        algorithms: ["RS256"],
+      });
       claims = payload as Record<string, unknown>;
     } catch (err) {
       console.error("[oidc] id_token verification failed", err);
@@ -78,22 +82,27 @@ export async function GET(req: NextRequest) {
     const sub = typeof claims.sub === "string" ? claims.sub : null;
     if (!sub) return fail(req, "oidc_no_sub");
     const email = typeof claims.email === "string" ? claims.email.toLowerCase() : null;
+    // An asserted but unverified address must never become an authenticated
+    // account's email. Team roster claims remain a separate lookup.
+    if (email && claims.email_verified !== true) return fail(req, "oidc_email_unverified");
     const name =
       (typeof claims.name === "string" && claims.name) ||
       (typeof claims.preferred_username === "string" && claims.preferred_username) ||
       "Host";
     const picture = typeof claims.picture === "string" ? claims.picture : null;
 
-    // Resolve the account: by OIDC subject first, then by email (so a FOSSClub
-    // sign-in links to an existing email/password account instead of colliding
-    // on the unique email).
-    let account = (
+    // Only the provider subject identifies an existing OIDC account. Linking
+    // by email can expose a password account or retain a pre-registered password
+    // controlled by someone else. Explicit, authenticated linking is separate.
+    const account = (
       await db.select().from(users).where(eq(users.subject, sub)).limit(1)
     )[0];
-    if (!account && email) {
-      account = (
+    if (email) {
+      const emailAccount = (
         await db.select().from(users).where(eq(users.email, email)).limit(1)
       )[0];
+      if (emailAccount && emailAccount.id !== account?.id)
+        return fail(req, "oidc_account_conflict");
     }
 
     let userId: string;
