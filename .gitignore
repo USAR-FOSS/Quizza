@@ -24,6 +24,10 @@
 # misc
 .DS_Store
 *.pem
+*.dump
+*.backup
+/scratch/backups/
+/backups/
 
 # debug
 npm-debug.log*

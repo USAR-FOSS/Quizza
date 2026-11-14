@@ -108,3 +108,10 @@ delayed messages remain.
 If Redis is unavailable, Postgres answer/reveal state remains authoritative and
 SSE clients recover on reconnect. If QStash is unavailable, a new live round is
 not started because its durable reveal cannot be scheduled.
+
+## Backup and recovery
+
+For database disaster recovery procedures, isolated restore rehearsal commands,
+and verification of database-stored uploads and migration state, see the
+[backup and restore runbook](runbooks/backup-restore.md).
+
