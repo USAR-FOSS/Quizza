@@ -24,7 +24,7 @@ architecture specification before making a focused contribution.
 | Accounts and OIDC | [OIDC setup](oidc.md), [threat model](threat-model.md) | `src/lib/auth.ts`, `src/lib/actions/auth.ts`, `src/app/api/v1/auth/oidc/` |
 | Team eligibility | [Team roster behavior](team-roster.md) | `src/lib/teams.ts`, `src/lib/sessions.ts`, `src/components/live/team-picker.tsx` |
 | Database and migrations | [Data dictionary](data-dictionary.md), [database workflow](development.md#database-changes) | `src/lib/db/schema.ts`, `src/lib/db/schema-types.ts`, `drizzle/` |
-| HTTP API | Runtime `/docs` and `/api/v1/openapi.json` | `src/lib/api/schemas.ts`, `src/lib/api/openapi.ts`, `src/lib/api-client.ts`, `src/app/api/v1/` |
+| HTTP API | [API cookbook](api-cookbook.md), runtime `/docs` and `/api/v1/openapi.json` | `src/lib/api/schemas.ts`, `src/lib/api/openapi.ts`, `src/lib/api-client.ts`, `src/app/api/v1/` |
 | Deployment and recovery | [Deployment](deployment.md), [runbook](runbooks/realtime.md), [upgrade notes](upgrade.md) | `Dockerfile`, `docker-compose.yml`, `scripts/vercel-build.mjs` |
 | Capacity | [Scale plan](realtime-scale-plan.md), [load procedure](runbooks/realtime.md#load-test) | `scripts/load/`, `scripts/integration/two-instance.mjs` |
 
