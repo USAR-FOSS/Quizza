@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, SkipForward, Square, Loader2, Users, Check } from "lucide-react";
+import { Play, SkipForward, Square, Loader2, Users, Check, QrCode, Copy, Maximize2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useEventStream } from "@/lib/use-event-stream";
 import type { HostSnapshot } from "@/lib/realtime/events";
@@ -18,6 +18,8 @@ import { LobbyCrowd } from "./lobby-crowd";
 import { QuizCover, RoomTheme } from "./room-theme";
 import { RoundClock } from "./round-clock";
 import { WordCloud } from "@/components/ui/word-cloud";
+import { QRCode } from "@/components/ui/qr-code";
+import { Dialog } from "@/components/ui/dialog";
 
 const storeKey = (code: string) => `quizza:host:${code}`;
 
@@ -26,6 +28,16 @@ export function Host({ code }: { code: string }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function copyJoinUrl() {
+    if (!joinUrl) return;
+    navigator.clipboard.writeText(joinUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
 
   useEffect(() => {
     let alive = true;
@@ -118,7 +130,16 @@ export function Host({ code }: { code: string }) {
       )}
       <header className="flex h-16 items-center justify-between border-b-2 border-ink/10 bg-paper px-5">
         <Logo className="h-7" />
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={() => setShowQR(true)}
+            title="Display QR code"
+            className="flex items-center gap-1.5 rounded-xl border-2 border-ink bg-paper px-3 py-1.5 font-display text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+          >
+            <QrCode className="size-4 text-grape" />
+            <span className="hidden sm:inline">QR Code</span>
+          </button>
           <span className="flex items-center gap-1.5 font-display text-sm font-bold text-ink-soft">
             <Users className="size-4" />
             {snap.participantCount}
@@ -134,6 +155,41 @@ export function Host({ code }: { code: string }) {
           )}
         </div>
       </header>
+
+      {showQR && (
+        <Dialog title="Scan to join" onClose={() => setShowQR(false)}>
+          <div className="flex flex-col items-center text-center">
+            <QRCode value={joinUrl} size={260} className="mx-auto" />
+            <p className="mt-4 font-display text-xs font-bold uppercase tracking-widest text-grape">
+              Room code
+            </p>
+            <p className="font-mono text-4xl font-extrabold tracking-wider text-ink sm:text-5xl">
+              {formatJoinCode(code)}
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              Scan with your phone camera or visit{" "}
+              <span className="font-mono font-bold text-ink">{joinUrl}</span>
+            </p>
+            <button
+              type="button"
+              onClick={copyJoinUrl}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl border-2 border-ink bg-grape px-5 py-2.5 font-display text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            >
+              {copied ? (
+                <>
+                  <Check className="size-4 text-mint" strokeWidth={3} />
+                  Link copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="size-4" />
+                  Copy room link
+                </>
+              )}
+            </button>
+          </div>
+        </Dialog>
+      )}
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-5 py-8">
         {error && (
@@ -157,6 +213,9 @@ export function Host({ code }: { code: string }) {
               joinUrl={joinUrl}
               snap={snap}
               onStart={() => control("start")}
+              onOpenQR={() => setShowQR(true)}
+              copied={copied}
+              onCopy={copyJoinUrl}
             />
           )}
 
@@ -327,11 +386,17 @@ function Lobby({
   joinUrl,
   snap,
   onStart,
+  onOpenQR,
+  copied,
+  onCopy,
 }: {
   code: string;
   joinUrl: string;
   snap: HostSnapshot;
   onStart: () => void;
+  onOpenQR: () => void;
+  copied: boolean;
+  onCopy: () => void;
 }) {
   return (
     <motion.div
@@ -341,18 +406,54 @@ function Lobby({
       className="text-center"
     >
       <QuizCover quiz={snap.quiz} />
-      <h1 className="mb-5 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+      <h1 className="mb-4 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
         {snap.quiz.title}
       </h1>
-      <p className="font-display text-sm font-bold uppercase tracking-widest text-grape">
-        Join at
-      </p>
-      <p className="mt-1 break-all font-display text-lg font-bold text-ink">
-        {joinUrl}
-      </p>
-      <p className="mt-4 font-mono text-[clamp(2.5rem,10vw,4.5rem)] font-extrabold tracking-wider text-ink">
-        {formatJoinCode(code)}
-      </p>
+
+      <div className="mx-auto my-6 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8">
+        <button
+          type="button"
+          onClick={onOpenQR}
+          title="Click to expand QR code"
+          className="group relative cursor-pointer transition-transform hover:scale-105 active:scale-100"
+        >
+          <QRCode value={joinUrl} size={170} />
+          <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg border border-ink bg-paper px-2 py-0.5 text-xs font-bold text-ink opacity-90 shadow-sm transition-opacity group-hover:opacity-100">
+            <Maximize2 className="size-3 text-grape" />
+            Expand
+          </span>
+        </button>
+
+        <div className="text-center sm:text-left">
+          <p className="font-display text-xs font-bold uppercase tracking-widest text-grape">
+            Join at
+          </p>
+          <p className="mt-0.5 break-all font-display text-base font-bold text-ink">
+            {joinUrl}
+          </p>
+          <p className="mt-2 font-mono text-[clamp(2.5rem,7vw,4rem)] font-extrabold tracking-wider text-ink">
+            {formatJoinCode(code)}
+          </p>
+          <button
+            type="button"
+            onClick={onCopy}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-xl border-2 border-ink bg-paper px-3 py-1 font-display text-xs font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+          >
+            {copied ? (
+              <>
+                <Check className="size-3.5 text-mint" strokeWidth={3} />
+                Link copied!
+              </>
+            ) : (
+              <>
+                <Copy className="size-3.5" />
+                Copy room link
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       <p className="mt-2 text-sm font-semibold text-ink-soft">
         {snap.participantCount}{" "}
         {snap.participantCount === 1 ? "player" : "players"} joined
