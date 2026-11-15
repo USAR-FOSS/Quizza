@@ -172,6 +172,20 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
     await runSave(() => actions.deleteQuestion(questionId));
   }
 
+  async function duplicateQuestion(questionId: string) {
+    await runSave(async () => {
+      const cloned = await actions.duplicateQuestion(questionId);
+      const originalIdx = quiz.questions.findIndex((q) => q.id === questionId);
+      const next = [...quiz.questions];
+      next.splice(originalIdx + 1, 0, cloned);
+      next.forEach((q, i) => {
+        q.position = i;
+      });
+      patchQuestions(next);
+      setSelectedId(cloned.id);
+    });
+  }
+
   function reorder(orderedIds: string[]) {
     const map = new Map(quiz.questions.map((q) => [q.id, q]));
     const next = orderedIds
@@ -240,6 +254,20 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
       q.options.filter((o) => o.id !== optionId),
     );
     await runSave(() => actions.deleteOption(optionId));
+  }
+
+  function reorderOptions(questionId: string, orderedIds: string[]) {
+    const q = quiz.questions.find((x) => x.id === questionId);
+    if (!q) return;
+    const map = new Map(q.options.map((o) => [o.id, o]));
+    const next = orderedIds
+      .map((id, i) => {
+        const o = map.get(id)!;
+        return { ...o, position: i };
+      })
+      .filter(Boolean);
+    setOptions(questionId, next);
+    void runSave(() => actions.reorderOptions(questionId, orderedIds));
   }
 
   const selected = quiz.questions.find((q) => q.id === selectedId) ?? null;
@@ -330,6 +358,7 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
           onAdd={addQuestion}
           onReorder={reorder}
           onDelete={deleteQuestion}
+          onDuplicate={duplicateQuestion}
         />
 
         <main className="min-w-0 flex-1">
@@ -355,6 +384,9 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
               }
               onSetCorrect={(oid) => setCorrect(selected.id, oid)}
               onDeleteOption={(oid) => deleteOption(selected.id, oid)}
+              onReorderOptions={(orderedIds) =>
+                reorderOptions(selected.id, orderedIds)
+              }
             />
           ) : (
             <EmptyState />

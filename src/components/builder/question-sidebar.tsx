@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Reorder } from "motion/react";
 import { Dialog } from "@/components/ui/dialog";
-import { Plus, GripVertical, Trash2 } from "lucide-react";
+import { Plus, GripVertical, Trash2, Copy } from "lucide-react";
 import { QUESTION_TYPES, QUESTION_TYPE_ORDER } from "@/lib/quiz-constants";
 import { QUESTION_TYPE_ICON } from "@/components/ui/quiz-icons";
 import type { QuestionType, QuestionWithOptions } from "@/lib/db/schema-types";
@@ -16,6 +16,7 @@ type Props = {
   onAdd: (type: QuestionType) => void;
   onReorder: (orderedIds: string[]) => void;
   onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
 };
 
 export function QuestionSidebar({
@@ -25,6 +26,7 @@ export function QuestionSidebar({
   onAdd,
   onReorder,
   onDelete,
+  onDuplicate,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const ids = questions.map((q) => q.id);
@@ -96,17 +98,32 @@ export function QuestionSidebar({
                   </span>
                 )}
               </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(q.id);
-                }}
-                className="shrink-0 rounded-lg p-1 text-ink-soft transition-opacity hover:bg-coral/15 hover:text-coral lg:opacity-0 lg:group-hover:opacity-100 focus:opacity-100"
-                aria-label="Delete question"
-              >
-                <Trash2 className="size-4" />
-              </button>
+              <div className="flex shrink-0 items-center gap-0.5 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDuplicate(q.id);
+                  }}
+                  className="rounded-lg p-1 text-ink-soft transition-colors hover:bg-grape/15 hover:text-grape"
+                  aria-label="Duplicate question"
+                  title="Duplicate question"
+                >
+                  <Copy className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(q.id);
+                  }}
+                  className="rounded-lg p-1 text-ink-soft transition-colors hover:bg-coral/15 hover:text-coral"
+                  aria-label="Delete question"
+                  title="Delete question"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             </Reorder.Item>
           ))}
         </Reorder.Group>

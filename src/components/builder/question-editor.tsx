@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Check, Trash2, Clock, Trophy, Minus } from "lucide-react";
+import { Plus, Check, Trash2, Clock, Trophy, Minus, ChevronUp, ChevronDown } from "lucide-react";
 import {
   COLOR_BG,
   DEFAULTS,
@@ -26,6 +26,7 @@ type Props = {
   onUpdateOption: (optionId: string, patch: Partial<OptionRow>) => void;
   onSetCorrect: (optionId: string) => void;
   onDeleteOption: (optionId: string) => void;
+  onReorderOptions?: (orderedIds: string[]) => void;
 };
 
 export function QuestionEditor({
@@ -195,6 +196,7 @@ export function QuestionEditor({
             onUpdateOption={onUpdateOption}
             onSetCorrect={onSetCorrect}
             onDeleteOption={onDeleteOption}
+            onReorderOptions={onReorderOptions}
           />
         ) : question.type === "scale" ? (
           <ScaleEditor question={question} onChange={onChange} />
@@ -220,12 +222,14 @@ function OptionsEditor({
   onUpdateOption,
   onSetCorrect,
   onDeleteOption,
+  onReorderOptions,
 }: {
   question: QuestionWithOptions;
   onAddOption: () => void;
   onUpdateOption: (optionId: string, patch: Partial<OptionRow>) => void;
   onSetCorrect: (optionId: string) => void;
   onDeleteOption: (optionId: string) => void;
+  onReorderOptions?: (orderedIds: string[]) => void;
 }) {
   const meta = QUESTION_TYPES[question.type];
   const fixed = question.type === "true_false"; // can't add/remove T/F
@@ -240,7 +244,7 @@ function OptionsEditor({
       )}
 
       <AnimatePresence initial={false}>
-        {question.options.map((opt) => (
+        {question.options.map((opt, i) => (
           <motion.div
             key={opt.id}
             layout
@@ -255,6 +259,39 @@ function OptionsEditor({
                 : "border-ink bg-paper-2",
             )}
           >
+            {!fixed && question.options.length > 1 && onReorderOptions && (
+              <div className="flex shrink-0 flex-col -my-1">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => {
+                    const next = [...question.options.map((o) => o.id)];
+                    [next[i], next[i - 1]] = [next[i - 1], next[i]];
+                    onReorderOptions(next);
+                  }}
+                  aria-label="Move option up"
+                  title="Move option up"
+                  className="rounded p-0.5 text-ink-soft hover:bg-paper hover:text-ink disabled:opacity-20"
+                >
+                  <ChevronUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === question.options.length - 1}
+                  onClick={() => {
+                    const next = [...question.options.map((o) => o.id)];
+                    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                    onReorderOptions(next);
+                  }}
+                  aria-label="Move option down"
+                  title="Move option down"
+                  className="rounded p-0.5 text-ink-soft hover:bg-paper hover:text-ink disabled:opacity-20"
+                >
+                  <ChevronDown className="size-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* color swatch -> cycles palette */}
             <button
               type="button"

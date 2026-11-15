@@ -310,6 +310,90 @@ export async function reorderQuestions(quizId: string, orderedIds: string[]) {
   });
 }
 
+export async function duplicateQuestion(
+  questionId: string,
+): Promise<QuestionWithOptions> {
+  const qOwner = await requireQuestionOwner(questionId);
+  const q = await db.query.questions.findFirst({
+    where: eq(questions.id, questionId),
+    with: {
+      options: { orderBy: asc(options.position) },
+    },
+  });
+  if (!q) throw new Error("Question not found.");
+
+  return db.transaction(async (tx) => {
+    // Shift later questions up by 1 to make room at q.position + 1
+    await tx
+      .update(questions)
+      .set({ position: sql`${questions.position} + 1` })
+      .where(
+        and(
+          eq(questions.quizId, q.quizId),
+          gt(questions.position, q.position),
+        ),
+      );
+
+    let mediaUrl = q.mediaUrl;
+    if (mediaUrl && isUploadUrl(mediaUrl)) {
+      const assetId = mediaUrl.split("/").at(-1);
+      if (assetId) {
+        const [asset] = await tx
+          .select()
+          .from(uploads)
+          .where(eq(uploads.id, assetId));
+        if (asset) {
+          const [clonedAsset] = await tx
+            .insert(uploads)
+            .values({
+              quizId: q.quizId,
+              ownerId: asset.ownerId,
+              contentType: asset.contentType,
+              data: asset.data,
+            })
+            .returning({ id: uploads.id });
+          mediaUrl = `/api/v1/uploads/${clonedAsset.id}`;
+        }
+      }
+    }
+
+    const [cloned] = await tx
+      .insert(questions)
+      .values({
+        quizId: q.quizId,
+        position: q.position + 1,
+        type: q.type,
+        prompt: q.prompt,
+        mediaUrl,
+        timeLimitSec: q.timeLimitSec,
+        points: q.points,
+        settings: q.settings,
+      })
+      .returning();
+
+    let clonedOpts: OptionRow[] = [];
+    if (q.options.length > 0) {
+      clonedOpts = await tx
+        .insert(options)
+        .values(
+          q.options.map((o) => ({
+            questionId: cloned.id,
+            position: o.position,
+            label: o.label,
+            color: o.color,
+            isCorrect: o.isCorrect,
+          })),
+        )
+        .returning();
+    }
+
+    return {
+      ...cloned,
+      options: clonedOpts,
+    };
+  });
+}
+
 /* ------------------------------------------------------------------ *
  *  options
  * ------------------------------------------------------------------ */
@@ -392,6 +476,40 @@ export async function deleteOption(optionId: string) {
         sql`${options.position} > ${row.position}`,
       ),
     );
+}
+
+export async function reorderOptions(
+  questionId: string,
+  orderedIds: string[],
+): Promise<void> {
+  await requireQuestionOwner(questionId);
+  z.array(z.string().uuid()).parse(orderedIds);
+  const existing = await db
+    .select({ id: options.id })
+    .from(options)
+    .where(eq(options.questionId, questionId));
+
+  if (
+    new Set(orderedIds).size !== existing.length ||
+    orderedIds.length !== existing.length ||
+    existing.some((o) => !orderedIds.includes(o.id))
+  ) {
+    throw new Error("Option order must contain every option exactly once.");
+  }
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(options)
+        .set({ position: i })
+        .where(
+          and(
+            eq(options.id, orderedIds[i]),
+            eq(options.questionId, questionId),
+          ),
+        );
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ *
