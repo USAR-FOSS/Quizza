@@ -198,7 +198,7 @@ export const Results = z.object({
 });
 
 export const ControlBody = z
-  .object({ action: z.enum(["start", "reveal", "next", "end"]) })
+  .object({ action: z.enum(["start", "reveal", "next", "end", "extend", "stop_timer"]) })
   .describe("Host control action for a live session");
 
 export const Ok = z.object({ ok: z.literal(true) });

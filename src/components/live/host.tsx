@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, SkipForward, Square, Loader2, Users, Check } from "lucide-react";
+import { Play, SkipForward, Square, Loader2, Users, Check, ClockPlus, FastForward } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useEventStream } from "@/lib/use-event-stream";
 import type { HostSnapshot } from "@/lib/realtime/events";
@@ -47,7 +47,9 @@ export function Host({ code }: { code: string }) {
   const url = hostToken ? api.streamUrl(code, { host: hostToken }) : null;
   const { data: snap, connection } = useEventStream<HostSnapshot>(url);
 
-  async function control(action: "start" | "reveal" | "next" | "end") {
+  async function control(
+    action: "start" | "reveal" | "next" | "end" | "extend" | "stop_timer",
+  ) {
     if (!hostToken || busy) return;
     setBusy(true);
     setError("");
@@ -203,6 +205,26 @@ export function Host({ code }: { code: string }) {
                 seconds={q.timeLimitSec}
                 clockOffsetMs={snap.clockOffsetMs}
               />
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => control("extend")}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border-2 border-ink bg-paper px-4 py-2 font-display text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+                >
+                  <ClockPlus className="size-4 text-grape" />
+                  <span>+15s More Time</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => control("stop_timer")}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border-2 border-ink bg-grape px-4 py-2 font-display text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+                >
+                  <FastForward className="size-4" />
+                  <span>End timer now</span>
+                </button>
+              </div>
             </motion.div>
           )}
 

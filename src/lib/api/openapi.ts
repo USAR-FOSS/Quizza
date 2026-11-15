@@ -254,7 +254,7 @@ const routes: RouteDef[] = [
     tags: ["Live"],
     summary: "Control a live session",
     description:
-      "Host-only. Advances the live session: start, reveal, next, or end. Requires the host token as a Bearer credential.",
+      "Host-only. Advances the live session: start, reveal, next, end, extend (+15s), or stop_timer (reveal early). Requires the host token as a Bearer credential.",
     parameters: [
       { name: "code", in: "path", required: true, description: "Join code" },
       {

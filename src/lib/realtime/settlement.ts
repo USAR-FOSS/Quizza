@@ -7,6 +7,7 @@ export type RevealJob = {
   sessionId: string;
   questionId: string;
   questionStartedAt: string;
+  force?: boolean;
 };
 export type RevealResult =
   | { status: "revealed" }
@@ -32,7 +33,7 @@ export async function settleDueQuestion(job: RevealJob): Promise<RevealResult> {
       .from(questions).where(eq(questions.id, job.questionId));
     if (!question) return { status: "stale" } as const;
     const remaining = startedAt.getTime() + question.timeLimitSec * 1000 - Date.now();
-    if (remaining > 0)
+    if (remaining > 0 && !job.force)
       return { status: "early", retryAfter: Math.max(1, Math.ceil(remaining / 1000)) } as const;
 
     const roundAnswers = await tx.select().from(answers).where(and(

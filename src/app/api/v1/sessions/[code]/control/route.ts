@@ -4,7 +4,7 @@ import { handle, json, parseBody, bearerToken, HttpError } from "@/lib/api/http"
 import { controlSession } from "@/lib/sessions";
 
 const ControlBody = z.object({
-  action: z.enum(["start", "reveal", "next", "end"]),
+  action: z.enum(["start", "reveal", "next", "end", "extend", "stop_timer"]),
 });
 
 type Ctx = { params: Promise<{ code: string }> };

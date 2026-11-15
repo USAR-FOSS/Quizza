@@ -244,7 +244,7 @@ export const api = {
   control: (
     code: string,
     hostToken: string,
-    action: "start" | "reveal" | "next" | "end",
+    action: "start" | "reveal" | "next" | "end" | "extend" | "stop_timer",
   ) =>
     request<{ ok: true }>(`/sessions/${code}/control`, {
       method: "POST",

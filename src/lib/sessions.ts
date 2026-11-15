@@ -1214,7 +1214,7 @@ export async function exportCsv(
 
 /* ------------------------- live host control ------------------------ */
 
-export type LiveAction = "start" | "reveal" | "next" | "end";
+export type LiveAction = "start" | "reveal" | "next" | "end" | "extend" | "stop_timer";
 
 /** Host-only control of a live session. Requires the host token. */
 export async function controlSession(
@@ -1241,7 +1241,7 @@ export async function controlSession(
       "already_started",
       "This session has already started",
     );
-  if ((action === "reveal" || action === "next") && s.status !== "active")
+  if ((action === "reveal" || action === "next" || action === "extend" || action === "stop_timer") && s.status !== "active")
     throw new HttpError(409, "not_started", "Start the session first");
   if (action === "next" && !s.revealed)
     throw new HttpError(
@@ -1249,6 +1249,61 @@ export async function controlSession(
       "not_revealed",
       "Wait for the shared reveal before the next round.",
     );
+  if (action === "extend") {
+    if (!s.currentQuestionId || s.revealed || !s.questionStartedAt) {
+      throw new HttpError(409, "not_active_round", "There is no running question to extend");
+    }
+    const question = await db.query.questions.findFirst({
+      where: eq(questions.id, s.currentQuestionId),
+      columns: { timeLimitSec: true },
+    });
+    if (!question) throw new HttpError(404, "question_not_found", "Question not found");
+
+    const newStartedAt = new Date(s.questionStartedAt.getTime() + 15_000);
+    const updated = await db
+      .update(sessions)
+      .set({ questionStartedAt: newStartedAt })
+      .where(
+        and(
+          eq(sessions.id, s.id),
+          eq(sessions.status, "active"),
+          eq(sessions.revealed, false),
+          eq(sessions.currentQuestionId, s.currentQuestionId),
+        ),
+      )
+      .returning({ id: sessions.id });
+
+    if (!updated.length) {
+      throw new HttpError(409, "state_changed", "The round status changed. Please refresh.");
+    }
+
+    await scheduleReveal(
+      {
+        sessionId: s.id,
+        questionId: s.currentQuestionId,
+        questionStartedAt: newStartedAt.toISOString(),
+      },
+      newStartedAt.getTime() + question.timeLimitSec * 1000,
+    );
+
+    await publishState(s.id);
+    return { ok: true as const };
+  }
+  if (action === "stop_timer") {
+    if (!s.currentQuestionId || !s.questionStartedAt) {
+      throw new HttpError(409, "not_active_round", "There is no running round to stop");
+    }
+    if (s.revealed) return { ok: true as const };
+
+    const result = await settleDueQuestion({
+      sessionId: s.id,
+      questionId: s.currentQuestionId,
+      questionStartedAt: s.questionStartedAt.toISOString(),
+      force: true,
+    });
+    if (result.status === "revealed") await publishState(s.id);
+    return { ok: true as const };
+  }
   if (action === "reveal" && !s.revealed) {
     const question = s.currentQuestionId
       ? await db.query.questions.findFirst({
