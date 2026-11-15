@@ -64,6 +64,13 @@
       "when": 1792307934975,
       "tag": "0008_bright_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792350000000,
+      "tag": "0009_session_quiz_snapshot",
+      "breakpoints": true
     }
   ]
 }

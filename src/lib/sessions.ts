@@ -35,7 +35,7 @@ import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
 import { matchingTeamName, normalizeTeamNames, normalizeTeamRoster, rosterTeamForEmail } from "@/lib/teams";
 import { getCurrentUser, oidcEnabled } from "@/lib/auth";
 import type { z } from "zod";
-import type { QuizSettings } from "@/lib/db/schema-types";
+import type { QuizSettings, QuizSnapshot } from "@/lib/db/schema-types";
 import type {
   CreateSessionBody,
   JoinBody,
@@ -128,6 +128,7 @@ export async function validateQuizForLaunch(quizId: string): Promise<string[]> {
 
 /** Load a session's quiz settings bag. */
 async function sessionSettings(s: SessionRow): Promise<QuizSettings> {
+  if (s.quizSnapshot?.settings) return s.quizSnapshot.settings;
   const quiz = await db.query.quizzes.findFirst({
     where: eq(quizzes.id, s.quizId),
     columns: { settings: true },
@@ -368,6 +369,43 @@ export async function createSession(
     status = "active"; // openness is gated by the window, not the status
   }
 
+  const fullQuiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, input.quizId),
+    with: {
+      questions: {
+        orderBy: asc(questions.position),
+        with: { options: { orderBy: asc(options.position) } },
+      },
+    },
+  });
+
+  const quizSnapshot: QuizSnapshot | null = fullQuiz
+    ? {
+        id: fullQuiz.id,
+        title: fullQuiz.title,
+        coverIcon: fullQuiz.coverIcon,
+        theme: fullQuiz.theme,
+        settings: (fullQuiz.settings as QuizSettings) ?? {},
+        questions: fullQuiz.questions.map((q) => ({
+          id: q.id,
+          position: q.position,
+          type: q.type,
+          prompt: q.prompt,
+          mediaUrl: q.mediaUrl,
+          timeLimitSec: q.timeLimitSec,
+          points: q.points,
+          settings: q.settings,
+          options: q.options.map((o) => ({
+            id: o.id,
+            position: o.position,
+            label: o.label,
+            isCorrect: o.isCorrect,
+            color: o.color,
+          })),
+        })),
+      }
+    : null;
+
   const hostToken = generateToken();
   for (let attempt = 0; attempt < 6; attempt++) {
     const code = generateJoinCode();
@@ -382,6 +420,7 @@ export async function createSession(
           code,
           opensAt,
           closesAt,
+          quizSnapshot,
         })
         .returning();
       return {
@@ -409,10 +448,12 @@ export async function createSession(
 
 export async function getPublicSession(code: string) {
   const s = await requireSession(code);
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    columns: { title: true, coverIcon: true, theme: true, settings: true },
-  });
+  const quiz =
+    s.quizSnapshot ??
+    (await db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      columns: { title: true, coverIcon: true, theme: true, settings: true },
+    }));
   const teamCounts = await db
     .select({ teamName: participants.teamName, count: sql<number>`count(*)::int` })
     .from(participants)
@@ -634,15 +675,17 @@ export async function listQuestions(code: string, clientToken: string | null) {
     throw new HttpError(401, "invalid_token", "Unknown participant");
   }
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: {
-        orderBy: asc(questions.position),
-        with: { options: { orderBy: asc(options.position) } },
+  const quiz =
+    s.quizSnapshot ??
+    (await db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      with: {
+        questions: {
+          orderBy: asc(questions.position),
+          with: { options: { orderBy: asc(options.position) } },
+        },
       },
-    },
-  });
+    }));
 
   const settings = (quiz?.settings as QuizSettings) ?? {};
   let qlist = quiz?.questions ?? [];
@@ -1031,15 +1074,17 @@ export async function getResults(code: string, ctx: ResultsContext) {
   const isHost = Boolean(ctx.hostToken && ctx.hostToken === s.hostToken);
   const over = isSessionOver(s);
   const settings = await sessionSettings(s);
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: {
-        orderBy: asc(questions.position),
-        with: { options: { orderBy: asc(options.position) } },
+  const quiz =
+    s.quizSnapshot ??
+    (await db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      with: {
+        questions: {
+          orderBy: asc(questions.position),
+          with: { options: { orderBy: asc(options.position) } },
+        },
       },
-    },
-  });
+    }));
   let participantFinished = false;
   if (s.mode === "scheduled" && !over && ctx.clientToken) {
     const player = await getParticipant(s.id, ctx.clientToken);
@@ -1159,12 +1204,14 @@ export async function exportCsv(
     throw new HttpError(403, "forbidden", "Host token required");
   }
 
-  const quiz = await db.query.quizzes.findFirst({
-    where: eq(quizzes.id, s.quizId),
-    with: {
-      questions: { orderBy: asc(questions.position), with: { options: true } },
-    },
-  });
+  const quiz =
+    s.quizSnapshot ??
+    (await db.query.quizzes.findFirst({
+      where: eq(quizzes.id, s.quizId),
+      with: {
+        questions: { orderBy: asc(questions.position), with: { options: true } },
+      },
+    }));
   const parts = await db
     .select()
     .from(participants)

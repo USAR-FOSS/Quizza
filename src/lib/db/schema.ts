@@ -11,8 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import type { QuizSettings, QuestionSettings } from "./schema-types";
-export type { QuizSettings, QuestionSettings } from "./schema-types";
+import type { QuizSettings, QuestionSettings, QuizSnapshot } from "./schema-types";
+export type { QuizSettings, QuestionSettings, QuizSnapshot } from "./schema-types";
 
 /* ------------------------------------------------------------------ *
  *  enums
@@ -172,6 +172,8 @@ export const sessions = pgTable(
     // scheduled mode: the window during which the quiz is open.
     opensAt: timestamp("opens_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
+    // immutable frozen snapshot of the quiz at launch time
+    quizSnapshot: jsonb("quiz_snapshot").$type<QuizSnapshot>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

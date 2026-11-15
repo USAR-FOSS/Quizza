@@ -50,6 +50,31 @@ export type LeaderboardPolicy = "per_question" | "at_end" | "never";
 export type ParticipationMode = "anonymous" | "one_per_device" | "signed_in";
 export type Powerup = "double" | "shield" | "safety_net" | "attack";
 
+export type QuizSnapshot = {
+  id: string;
+  title: string;
+  coverIcon: string;
+  theme: string;
+  settings: QuizSettings;
+  questions: Array<{
+    id: string;
+    position: number;
+    type: QuestionType;
+    prompt: string;
+    mediaUrl: string | null;
+    timeLimitSec: number;
+    points: number;
+    settings: QuestionSettings;
+    options: Array<{
+      id: string;
+      position: number;
+      label: string;
+      isCorrect: boolean;
+      color: string | null;
+    }>;
+  }>;
+};
+
 export type QuizSettings = {
   teamSelection?: boolean;
   teamNames?: string[];
