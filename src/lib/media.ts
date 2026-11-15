@@ -12,12 +12,12 @@ export function isMediaUrl(value: string): boolean {
 export function mediaKind(value: string): "image" | "video" | "audio" {
   const path = new URL(value, "https://quizza.invalid").pathname.toLowerCase();
   if (/\.(mp4|webm|ogv)$/.test(path)) return "video";
-  if (/\.(mp3|wav|ogg|m4a)$/.test(path)) return "audio";
+  if (/\.(mp3|wav|ogg|m4a|aac)$/.test(path)) return "audio";
   return "image";
 }
 
 export function isUploadUrl(value: string): boolean {
-  return /^\/api\/v1\/uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+  return /^\/api\/v1\/uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]+)?$/.test(
     value,
   );
 }

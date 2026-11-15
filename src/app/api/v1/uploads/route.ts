@@ -7,9 +7,10 @@ import { requireQuizOwner } from "@/lib/quiz-access";
 import { getParticipantByToken, resolveSession } from "@/lib/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import {
-  imageContentType,
+  extensionForContentType,
   isSameUploadOrigin,
-  MAX_IMAGE_BYTES,
+  MAX_MEDIA_BYTES,
+  mediaContentType,
 } from "@/lib/upload-format";
 import { scheduleRoster } from "@/lib/realtime/notifications";
 
@@ -67,26 +68,30 @@ export const POST = handle(async (req: NextRequest) => {
       "This quiz or player has reached its image upload allowance.",
     );
   const reader = req.body?.getReader();
-  if (!reader) throw new HttpError(400, "empty", "Choose an image first.");
+  if (!reader) throw new HttpError(400, "empty", "Choose a file first.");
   const chunks: Uint8Array[] = [];
   let size = 0;
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > MAX_IMAGE_BYTES) {
+    if (size > MAX_MEDIA_BYTES) {
       await reader.cancel();
-      throw new HttpError(413, "too_large", "Use an image smaller than 2 MB.");
+      throw new HttpError(
+        413,
+        "too_large",
+        "Use a media file smaller than 6 MB.",
+      );
     }
     chunks.push(value);
   }
   const bytes = Buffer.concat(chunks);
-  const contentType = imageContentType(bytes);
+  const contentType = mediaContentType(bytes);
   if (!contentType)
     throw new HttpError(
       415,
-      "invalid_image",
-      "Choose a PNG, JPEG or WebP image.",
+      "invalid_media",
+      "Choose a PNG, JPEG, WebP image or MP3, WAV, OGG audio file.",
     );
   const [asset] = await db
     .insert(uploads)
@@ -98,7 +103,8 @@ export const POST = handle(async (req: NextRequest) => {
       data: bytes.toString("base64"),
     })
     .returning({ id: uploads.id });
-  const url = `/api/v1/uploads/${asset.id}`;
+  const ext = extensionForContentType(contentType);
+  const url = `/api/v1/uploads/${asset.id}${ext}`;
   if (participantId && sessionId) {
     await db
       .update(participants)

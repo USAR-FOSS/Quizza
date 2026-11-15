@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ImageOff } from "lucide-react";
+import { ImageOff, Volume2 } from "lucide-react";
 import { isMediaUrl, mediaKind } from "@/lib/media";
 
 export function QuestionMedia({ url }: { url?: string | null }) {
@@ -26,13 +26,24 @@ export function QuestionMedia({ url }: { url?: string | null }) {
           onError={() => setFailedUrl(url)}
         />
       ) : kind === "audio" ? (
-        <audio
-          src={url}
-          controls
-          preload="metadata"
-          className="w-full p-3"
-          onError={() => setFailedUrl(url)}
-        />
+        <div className="flex flex-col items-center justify-center p-6 text-center">
+          <div className="mb-3 flex size-14 items-center justify-center rounded-2xl border-2 border-ink bg-sun/40 shadow-pop">
+            <Volume2 className="size-7 text-ink" />
+          </div>
+          <p className="font-display text-base font-extrabold text-ink">
+            Audio prompt
+          </p>
+          <p className="mb-4 text-xs font-semibold text-ink-soft">
+            Listen to the sound clip before submitting your answer
+          </p>
+          <audio
+            src={url}
+            controls
+            preload="metadata"
+            className="w-full max-w-md accent-grape"
+            onError={() => setFailedUrl(url)}
+          />
+        </div>
       ) : (
         // Arbitrary host-provided URLs load directly, without a server image proxy.
         // eslint-disable-next-line @next/next/no-img-element

@@ -81,6 +81,9 @@ export function QuestionEditor({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <ImageUpload
             quizId={question.quizId}
+            label="Upload picture or audio"
+            allowCrop
+            allowAudio
             onUpload={(url) => {
               setMediaDraft(url);
               onChange({ mediaUrl: url });
