@@ -83,3 +83,17 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 export function oidcEnabled(): boolean {
   return Boolean(process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET);
 }
+
+export { isUserAdmin } from "./admin-auth";
+
+/** Requires an authenticated user with administrative role or throws. */
+export async function requireAdminUser(): Promise<SessionUser> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error("401: Sign in required");
+  }
+  if (!isUserAdmin(user)) {
+    throw new Error("403: Admin privileges required");
+  }
+  return user;
+}

@@ -5,7 +5,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { ArrowUpRight, Plus, Shapes, Radio, Trophy } from "lucide-react";
 import { db } from "@/lib/db";
 import { quizzes, sessions } from "@/lib/db/schema";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isUserAdmin } from "@/lib/auth";
 import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { QuizLibrary } from "@/components/dashboard/quiz-library";
@@ -48,7 +48,11 @@ async function Inner() {
         <p className="min-w-0 truncate text-xs text-ink-soft">
           Signed in as {user.email || user.name}
         </p>
-        <UserMenu name={user.name || user.email || "Host"} color="grape" />
+        <UserMenu
+          name={user.name || user.email || "Host"}
+          color="grape"
+          isAdmin={isUserAdmin(user)}
+        />
       </div>
       <section className="relative overflow-hidden rounded-[2rem] border border-ink/15 bg-[#e9e2f7] px-6 py-8 sm:p-9">
         <div className="relative z-10 max-w-lg">
