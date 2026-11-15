@@ -1,5 +1,6 @@
 "use client";
 import { motion } from "motion/react";
+import { UserX } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
 import type { PlayerSnapshot } from "@/lib/realtime/events";
@@ -11,9 +12,11 @@ function seed(id: string) {
 export function LobbyCrowd({
   players,
   meId,
+  onKick,
 }: {
   players: PlayerSnapshot["onlineParticipants"];
   meId?: string;
+  onKick?: (participantId: string, nickname: string) => void;
 }) {
   return (
     <section
@@ -50,7 +53,7 @@ export function LobbyCrowd({
                     height: size,
                     animationDelay: `${-(hash % 40) / 10}s`,
                   }}
-                  className="avatar-bob"
+                  className="group relative avatar-bob"
                 >
                   <Avatar
                     src={p.avatarUrl}
@@ -58,6 +61,20 @@ export function LobbyCrowd({
                     color={p.avatarColor}
                     className="size-full text-2xl shadow-pop"
                   />
+                  {onKick && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onKick(p.participantId, p.nickname);
+                      }}
+                      title={`Remove ${p.nickname}`}
+                      aria-label={`Remove ${p.nickname}`}
+                      className="absolute -right-1 -top-1 hidden size-5 items-center justify-center rounded-full border border-ink bg-coral text-white shadow-sm transition-transform hover:scale-110 active:scale-95 group-hover:flex focus:flex"
+                    >
+                      <UserX className="size-3" />
+                    </button>
+                  )}
                 </div>
                 <span
                   className="max-w-full truncate text-xs font-bold"

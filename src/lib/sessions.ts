@@ -15,6 +15,8 @@ import {
   scheduleRoster,
   scheduleAnswerCount,
 } from "@/lib/realtime/notifications";
+import { publish } from "@/lib/realtime/bus";
+import { removePresence } from "@/lib/realtime/presence";
 import { publishState } from "@/lib/realtime/snapshot";
 import { scheduleReveal } from "@/lib/realtime/scheduler";
 import { settleDueQuestion } from "@/lib/realtime/settlement";
@@ -519,13 +521,41 @@ export async function joinSession(
     );
   }
 
+  if (settings.maxParticipants && settings.maxParticipants > 0) {
+    const [{ totalCount }] = await db
+      .select({ totalCount: sql<number>`count(*)::int` })
+      .from(participants)
+      .where(eq(participants.sessionId, s.id));
+    if (totalCount >= settings.maxParticipants) {
+      throw new HttpError(
+        409,
+        "room_full",
+        `This session has reached its capacity of ${settings.maxParticipants} participants`,
+      );
+    }
+  }
+
   const clientToken = generateToken();
   const avatarColor = input.avatarColor ?? colorFor(input.nickname);
   try {
     const values = { sessionId: s.id, nickname: input.nickname, teamName, rosterEmail, avatarColor, clientToken, userId, deviceId };
-    const p = teamName ? await db.transaction(async (tx) => {
+    const needsTransaction = Boolean(teamName || settings.maxParticipants);
+    const p = needsTransaction ? await db.transaction(async (tx) => {
       // Serializes joins for this room, including joins handled by other instances.
       await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, s.id)).for("update");
+      if (settings.maxParticipants && settings.maxParticipants > 0) {
+        const [{ totalCount }] = await tx
+          .select({ totalCount: sql<number>`count(*)::int` })
+          .from(participants)
+          .where(eq(participants.sessionId, s.id));
+        if (totalCount >= settings.maxParticipants) {
+          throw new HttpError(
+            409,
+            "room_full",
+            `This session has reached its capacity of ${settings.maxParticipants} participants`,
+          );
+        }
+      }
       const identity = userId ? eq(participants.userId, userId)
         : deviceId ? eq(participants.deviceId, deviceId) : null;
       if (identity) {
@@ -538,10 +568,12 @@ export async function joinSession(
           .where(and(eq(participants.sessionId, s.id), eq(participants.rosterEmail, rosterEmail))).limit(1);
         if (claimed) throw new HttpError(409, "team_email_used", "That email has already been used for this quiz.");
       }
-      const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(participants)
-        .where(and(eq(participants.sessionId, s.id), eq(participants.teamName, teamName)));
-      if (count >= (settings.teamSize ?? 1))
-        throw new HttpError(409, "team_full", `${teamName} has already used all ${settings.teamSize ?? 1} allowed ${settings.teamSize === 1 || !settings.teamSize ? "attempt" : "attempts"} for this quiz.`);
+      if (teamName) {
+        const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(participants)
+          .where(and(eq(participants.sessionId, s.id), eq(participants.teamName, teamName)));
+        if (count >= (settings.teamSize ?? 1))
+          throw new HttpError(409, "team_full", `${teamName} has already used all ${settings.teamSize ?? 1} allowed ${settings.teamSize === 1 || !settings.teamSize ? "attempt" : "attempts"} for this quiz.`);
+      }
       const [joined] = await tx.insert(participants).values(values).returning();
       return joined;
     }) : (await db.insert(participants).values(values).returning())[0];
@@ -1390,4 +1422,55 @@ export async function controlSession(
 
   await publishState(s.id);
   return { ok: true as const };
+}
+
+/** Kick a participant from an active live session. */
+export async function kickParticipant(
+  code: string,
+  hostToken: string,
+  participantId: string,
+) {
+  const s = await requireSession(code);
+  if (s.hostToken !== hostToken) {
+    throw new HttpError(403, "forbidden", "Invalid host token");
+  }
+  if (s.status === "ended") {
+    throw new HttpError(409, "session_ended", "Session has already ended");
+  }
+
+  const [p] = await db
+    .select()
+    .from(participants)
+    .where(
+      and(
+        eq(participants.id, participantId),
+        eq(participants.sessionId, s.id),
+      ),
+    )
+    .limit(1);
+
+  if (!p) {
+    throw new HttpError(404, "participant_not_found", "Participant not found");
+  }
+
+  await db.delete(participants).where(eq(participants.id, participantId));
+
+  if (s.mode === "live") {
+    await removePresence(s.id, p.id).catch(() => {});
+    await publish(s.id, {
+      kind: "participant_changed",
+      participant: {
+        participantId: p.id,
+        nickname: p.nickname,
+        avatarColor: p.avatarColor,
+        avatarUrl: p.avatarUrl,
+        score: p.score,
+        rank: 0,
+      },
+      joined: false,
+    });
+    await publishState(s.id);
+  }
+
+  return { ok: true as const, kickedParticipantId: participantId };
 }

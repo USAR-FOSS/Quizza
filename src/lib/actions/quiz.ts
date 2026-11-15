@@ -109,6 +109,7 @@ const quizSettingsSchema = z.object({
   participation: z
     .enum(["anonymous", "one_per_device", "signed_in"])
     .optional(),
+  maxParticipants: z.number().int().min(1).max(10000).optional(),
 });
 
 const updateQuizSchema = z.object({

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, SkipForward, Square, Loader2, Users, Check } from "lucide-react";
+import { Play, SkipForward, Square, Loader2, Users, Check, UserX } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useEventStream } from "@/lib/use-event-stream";
 import type { HostSnapshot } from "@/lib/realtime/events";
@@ -58,6 +58,24 @@ export function Host({ code }: { code: string }) {
         err instanceof Error
           ? err.message
           : "Couldn’t control the session. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleKick(participantId: string, nickname: string) {
+    if (!hostToken || busy) return;
+    if (typeof window !== "undefined" && !window.confirm(`Remove ${nickname} from this session?`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.kickParticipant(code, hostToken, participantId);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Couldn't remove participant. Try again.",
       );
     } finally {
       setBusy(false);
@@ -157,6 +175,7 @@ export function Host({ code }: { code: string }) {
               joinUrl={joinUrl}
               snap={snap}
               onStart={() => control("start")}
+              onKick={handleKick}
             />
           )}
 
@@ -260,7 +279,7 @@ export function Host({ code }: { code: string }) {
                 </div>
               )}
 
-              <MiniBoard snap={snap} />
+              <MiniBoard snap={snap} onKick={handleKick} />
               {q.type === "word_cloud" && (
                 <WordCloud values={snap.reveal?.textValues ?? []} />
               )}
@@ -307,7 +326,7 @@ export function Host({ code }: { code: string }) {
               <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
                 Session ended
               </h1>
-              <MiniBoard snap={snap} full />
+              <MiniBoard snap={snap} full onKick={handleKick} />
               <Link
                 href={`/results/${code}`}
                 className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl border-2 border-ink bg-paper px-6 font-display font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5"
@@ -327,11 +346,13 @@ function Lobby({
   joinUrl,
   snap,
   onStart,
+  onKick,
 }: {
   code: string;
   joinUrl: string;
   snap: HostSnapshot;
   onStart: () => void;
+  onKick?: (participantId: string, nickname: string) => void;
 }) {
   return (
     <motion.div
@@ -357,7 +378,7 @@ function Lobby({
         {snap.participantCount}{" "}
         {snap.participantCount === 1 ? "player" : "players"} joined
       </p>
-      <LobbyCrowd players={snap.onlineParticipants} />
+      <LobbyCrowd players={snap.onlineParticipants} onKick={onKick} />
 
       <button
         onClick={onStart}
@@ -371,7 +392,15 @@ function Lobby({
   );
 }
 
-function MiniBoard({ snap, full }: { snap: HostSnapshot; full?: boolean }) {
+function MiniBoard({
+  snap,
+  full,
+  onKick,
+}: {
+  snap: HostSnapshot;
+  full?: boolean;
+  onKick?: (participantId: string, nickname: string) => void;
+}) {
   const list = full
     ? snap.leaderboard.slice(0, 10)
     : snap.leaderboard.slice(0, 5);
@@ -381,7 +410,7 @@ function MiniBoard({ snap, full }: { snap: HostSnapshot; full?: boolean }) {
       {list.map((e) => (
         <div
           key={e.participantId}
-          className="flex items-center gap-3 rounded-2xl border-2 border-ink bg-paper p-2.5 shadow-pop"
+          className="group flex items-center gap-3 rounded-2xl border-2 border-ink bg-paper p-2.5 shadow-pop"
         >
           <span className="w-6 text-center font-display font-extrabold text-ink-soft">
             {e.rank}
@@ -398,6 +427,17 @@ function MiniBoard({ snap, full }: { snap: HostSnapshot; full?: boolean }) {
           <span className="font-display font-extrabold text-ink">
             {e.score}
           </span>
+          {onKick && (
+            <button
+              type="button"
+              onClick={() => onKick(e.participantId, e.nickname)}
+              title={`Remove ${e.nickname}`}
+              aria-label={`Remove ${e.nickname}`}
+              className="hidden size-6 items-center justify-center rounded-lg border border-ink/20 text-ink-soft transition-colors hover:border-coral hover:bg-coral hover:text-white group-hover:flex focus:flex"
+            >
+              <UserX className="size-3.5" />
+            </button>
+          )}
         </div>
       ))}
     </div>

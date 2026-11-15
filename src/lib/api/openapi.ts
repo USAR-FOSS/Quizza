@@ -182,6 +182,26 @@ const routes: RouteDef[] = [
     },
   },
   {
+    method: "delete",
+    path: "/api/v1/sessions/{code}/participants/{participantId}",
+    tags: ["Participants"],
+    summary: "Remove a participant from the session",
+    description:
+      "Host-only moderation action. Immediately kicks the participant, purges presence, and broadcasts participant removal to the live room.",
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+      { name: "participantId", in: "path", required: true, description: "Participant UUID" },
+      { name: "authorization", in: "header", required: true, description: "Bearer <host token>" },
+    ],
+    responses: {
+      "200": { description: "Participant kicked", schema: "Ok" },
+      "401": { description: "Missing host token", schema: "ApiError" },
+      "403": { description: "Invalid host token", schema: "ApiError" },
+      "404": { description: "Participant or session not found", schema: "ApiError" },
+      "409": { description: "Session has already ended", schema: "ApiError" },
+    },
+  },
+  {
     method: "get",
     path: "/api/v1/sessions/{code}/questions",
     tags: ["Play"],

@@ -59,6 +59,30 @@ export function QuizSettingsPanel({
 
       <div className="mt-6">
         <h3 className="mb-2 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
+          <Users className="size-4" /> Capacity limit
+        </h3>
+        <p className="mb-2 text-sm text-ink-soft">
+          Optionally cap the maximum number of participants who can join this quiz.
+        </p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            placeholder="Unlimited"
+            value={settings.maxParticipants ?? ""}
+            onChange={(e) => {
+              const val = e.target.value.trim();
+              onChange({ maxParticipants: val ? Math.max(1, parseInt(val, 10)) : undefined });
+            }}
+            className="w-36 rounded-xl border-2 border-ink/20 bg-paper px-3 py-2 font-display text-sm font-bold focus:border-ink focus:outline-none"
+          />
+          <span className="text-xs text-ink-soft">Leave blank for unlimited</span>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="mb-2 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-widest text-ink-soft">
           <Users className="size-4" /> Teams
         </h3>
         <Toggle label="Players choose a team" on={settings.teamSelection ?? false}

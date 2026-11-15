@@ -71,6 +71,8 @@ export type QuizSettings = {
   leaderboard?: LeaderboardPolicy; // default "at_end"
   // who may join and whether replay is prevented
   participation?: ParticipationMode; // default "one_per_device"
+  // maximum concurrent participants allowed in a session
+  maxParticipants?: number;
 };
 
 export type QuizRow = {

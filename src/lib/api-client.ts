@@ -244,13 +244,25 @@ export const api = {
   control: (
     code: string,
     hostToken: string,
-    action: "start" | "reveal" | "next" | "end",
+    action: "start" | "reveal" | "next" | "end" | "extend" | "stop_timer",
   ) =>
     request<{ ok: true }>(`/sessions/${code}/control`, {
       method: "POST",
       headers: { authorization: `Bearer ${hostToken}` },
       body: JSON.stringify({ action }),
     }),
+
+  kickParticipant: (code: string, hostToken: string, participantId: string) =>
+    request<{ ok: true; kickedParticipantId: string }>(
+      `/sessions/${code}/participants/${participantId}`,
+      {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${hostToken}`,
+          "x-host-token": hostToken,
+        },
+      },
+    ),
 
   /** URL for an EventSource connection. Host or player auth goes in the query,
    * since EventSource cannot send headers. */
