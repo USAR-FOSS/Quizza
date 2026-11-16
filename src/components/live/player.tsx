@@ -28,6 +28,7 @@ import { powerupsLeft, type Powerup } from "@/lib/powerups";
 import { LoadingState } from "@/components/ui/loading-state";
 import { AvatarChoice } from "@/components/ui/avatar-choice";
 import { uploadImage } from "@/lib/upload-client";
+import { formatScheduledTimestamp } from "@/lib/format-time";
 import { QuizCover, RoomTheme } from "./room-theme";
 import { TeamPicker } from "./team-picker";
 import { restorePlayerIdentity, savePlayerIdentity, type PlayerIdentity } from "@/lib/player-identity";
@@ -985,8 +986,9 @@ function windowText(session: SessionPublic | null): string {
   const opens = session.opensAt ? new Date(session.opensAt) : null;
   const closes = session.closesAt ? new Date(session.closesAt) : null;
   const now = Date.now();
-  if (opens && now < opens.getTime()) return `Opens ${opens.toLocaleString()}.`;
+  if (opens && now < opens.getTime())
+    return `Opens ${formatScheduledTimestamp(opens)}.`;
   if (closes && now > closes.getTime())
-    return `Closed ${closes.toLocaleString()}.`;
+    return `Closed ${formatScheduledTimestamp(closes)}.`;
   return "This room is not open right now.";
 }

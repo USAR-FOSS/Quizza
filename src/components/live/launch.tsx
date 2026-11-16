@@ -7,6 +7,7 @@ import { motion } from "motion/react";
 import { Calendar, Radio, Copy, Check, BarChart3 } from "lucide-react";
 import { api, ApiClientError, type SessionCreated } from "@/lib/api-client";
 import { formatJoinCode } from "@/lib/codes";
+import { formatScheduledTimestamp } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 
 type Mode = "scheduled" | "live";
@@ -255,8 +256,20 @@ function Created({
 
       {session.mode === "scheduled" && session.opensAt && session.closesAt && (
         <p className="mt-4 text-sm text-ink-soft">
-          Open {new Date(session.opensAt).toLocaleString()} to{" "}
-          {new Date(session.closesAt).toLocaleString()}
+          Open{" "}
+          <time
+            dateTime={new Date(session.opensAt).toISOString()}
+            aria-label={`Opens on ${formatScheduledTimestamp(session.opensAt)}`}
+          >
+            {formatScheduledTimestamp(session.opensAt)}
+          </time>{" "}
+          to{" "}
+          <time
+            dateTime={new Date(session.closesAt).toISOString()}
+            aria-label={`Closes on ${formatScheduledTimestamp(session.closesAt)}`}
+          >
+            {formatScheduledTimestamp(session.closesAt)}
+          </time>
         </p>
       )}
 
