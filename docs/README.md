@@ -18,7 +18,7 @@ architecture specification before making a focused contribution.
 | Area | Guide or contract | Code entry points |
 | --- | --- | --- |
 | Themes and visual changes | [Theme guide](contributing/themes.md) | `src/lib/quiz-constants.ts`, `src/components/live/room-theme.tsx`, `src/app/globals.css` |
-| Quiz authoring | [System design](sdd.md), [current capabilities](gaps.md) | `src/components/builder/`, `src/lib/actions/quiz.ts`, `src/lib/quiz-access.ts` |
+| Quiz authoring | [System design](sdd.md), [current capabilities](gaps.md), [Audience polling workshop](workshops/audience-polling.md) | `src/components/builder/`, `src/lib/actions/quiz.ts`, `src/lib/quiz-access.ts` |
 | Live and scheduled play | [System design](sdd.md), [realtime runbook](runbooks/realtime.md) | `src/lib/sessions.ts`, `src/lib/realtime/`, `src/components/live/` |
 | Scoring and powerups | [Design decisions](decisions.md) and adjacent tests | `src/lib/scoring.ts`, `src/lib/powerups.ts`, `src/lib/realtime/settlement.ts` |
 | Accounts and OIDC | [OIDC setup](oidc.md), [threat model](threat-model.md) | `src/lib/auth.ts`, `src/lib/actions/auth.ts`, `src/app/api/v1/auth/oidc/` |
