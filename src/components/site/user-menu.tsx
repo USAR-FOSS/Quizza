@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, LayoutGrid } from "lucide-react";
@@ -10,12 +10,18 @@ import { Avatar } from "@/components/ui/avatar";
 export function UserMenu({ name, color }: { name: string; color: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function logout() {
+    setError(null);
     start(async () => {
-      await logoutAction();
-      router.push("/");
-      router.refresh();
+      try {
+        await logoutAction();
+        router.push("/");
+        router.refresh();
+      } catch {
+        setError("Could not log out. Please check your connection and try again.");
+      }
     });
   }
 
@@ -39,6 +45,12 @@ export function UserMenu({ name, color }: { name: string; color: string }) {
       >
         <LogOut className="size-4" />
       </button>
+      {error && (
+        <span role="alert" className="text-xs font-semibold text-coral">
+          {error}
+        </span>
+      )}
     </div>
   );
 }
+
