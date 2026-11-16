@@ -22,6 +22,7 @@ import { generateJoinCode, generateToken } from "@/lib/codes";
 import { QUESTION_TYPES, OPTION_COLORS } from "@/lib/quiz-constants";
 import { clampResponseMs, computePoints } from "@/lib/scoring";
 import {
+  canDiscloseScorecardAnswer,
   canRevealAnswers,
   canShowLeaderboard,
   participationMode,
@@ -1186,6 +1187,7 @@ export async function exportCsv(
     "correct",
     "response_ms",
     "points",
+    "powerup",
   ];
   const rows = [header.map(csvField).join(",")];
 
@@ -1206,10 +1208,156 @@ export async function exportCsv(
         csvField(a.isCorrect ? "yes" : "no"),
         csvField(a.responseMs),
         csvField(a.points),
+        csvField(a.powerup ?? ""),
       ].join(","),
     );
   }
   return rows.join("\n");
+}
+
+/** Detailed per-question scorecard and drilldown for a participant. */
+export async function getParticipantReview(
+  code: string,
+  participantId: string,
+  auth: { hostToken?: string | null; clientToken?: string | null },
+) {
+  const s = await requireSession(code);
+  const isHost = Boolean(auth.hostToken && auth.hostToken === s.hostToken);
+
+  const [p] = await db
+    .select()
+    .from(participants)
+    .where(and(eq(participants.id, participantId), eq(participants.sessionId, s.id)))
+    .limit(1);
+
+  if (!p) {
+    throw new HttpError(404, "participant_not_found", "Participant not found");
+  }
+
+  // Authorization: must be host OR the participant themselves with matching clientToken
+  const isSelf = Boolean(auth.clientToken && auth.clientToken === p.clientToken);
+  if (!isHost && !isSelf) {
+    throw new HttpError(403, "forbidden", "You are not authorized to view this scorecard");
+  }
+
+  const over = isSessionOver(s);
+  const settings = await sessionSettings(s);
+  const policy = revealPolicy(settings);
+
+  // Compute rank among all participants
+  const allParts = await db
+    .select({ id: participants.id, score: participants.score })
+    .from(participants)
+    .where(eq(participants.sessionId, s.id))
+    .orderBy(desc(participants.score), asc(participants.joinedAt));
+
+  const rankIdx = allParts.findIndex((item) => item.id === p.id);
+  const rank = rankIdx !== -1 ? rankIdx + 1 : 1;
+
+  const quiz = await db.query.quizzes.findFirst({
+    where: eq(quizzes.id, s.quizId),
+    with: {
+      questions: {
+        orderBy: asc(questions.position),
+        with: { options: { orderBy: asc(options.position) } },
+      },
+    },
+  });
+
+  const participantAnswers = await db
+    .select()
+    .from(answers)
+    .where(and(eq(answers.sessionId, s.id), eq(answers.participantId, p.id)));
+
+  const answerByQuestion = new Map(participantAnswers.map((a) => [a.questionId, a]));
+
+  const powerupsUsed: string[] = [];
+  let correctCount = 0;
+  let totalResponseMs = 0;
+  let responseCount = 0;
+
+  const qs = quiz?.questions ?? [];
+  const currentLiveIdx = s.mode === "live" && s.currentQuestionId
+    ? qs.findIndex((item) => item.id === s.currentQuestionId)
+    : -1;
+
+  const breakdown = qs.map((q, index) => {
+    const a = answerByQuestion.get(q.id);
+    const answered = Boolean(a);
+    if (a?.powerup) {
+      powerupsUsed.push(a.powerup);
+    }
+    if (a?.responseMs != null) {
+      totalResponseMs += a.responseMs;
+      responseCount++;
+    }
+
+    // Determine whether this specific question's answer can be disclosed
+    const canDisclose = canDiscloseScorecardAnswer({
+      isHost,
+      isOver: over,
+      policy,
+      mode: s.mode as "live" | "scheduled",
+      currentQuestionIndex: currentLiveIdx,
+      questionIndex: index,
+      isRevealed: Boolean(s.revealed),
+      answered,
+    });
+
+    if (canDisclose && a?.isCorrect) {
+      correctCount++;
+    }
+
+    const correctOpt = q.options.find((o) => o.isCorrect);
+    const selectedOpt = a?.optionId ? q.options.find((o) => o.id === a.optionId) : null;
+    const userAnswerText = selectedOpt
+      ? selectedOpt.label
+      : (a?.textValue ?? (a?.numberValue != null ? String(a.numberValue) : null));
+
+    return {
+      questionId: q.id,
+      index,
+      prompt: q.prompt,
+      type: q.type,
+      timeLimitSec: q.timeLimitSec,
+      maxPoints: q.points,
+      answered,
+      userAnswer: userAnswerText,
+      selectedOptionId: a?.optionId ?? null,
+      isCorrect: canDisclose ? (a ? a.isCorrect : false) : null,
+      correctAnswer: canDisclose ? (correctOpt?.label ?? null) : null,
+      pointsAwarded: canDisclose ? (a ? a.points : 0) : null,
+      responseMs: a?.responseMs ?? null,
+      powerup: a?.powerup ?? null,
+      attackStolen: a?.attackStolen ?? 0,
+      attackBlocked: a?.attackBlocked ?? false,
+    };
+  });
+
+  const totalAnswered = participantAnswers.length;
+  const accuracyPct = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+  const avgResponseMs = responseCount > 0 ? Math.round(totalResponseMs / responseCount) : 0;
+
+  return {
+    participant: {
+      id: p.id,
+      nickname: p.nickname,
+      teamName: p.teamName,
+      avatarColor: p.avatarColor,
+      avatarUrl: p.avatarUrl,
+      score: p.score,
+      rank,
+    },
+    summary: {
+      totalQuestions: qs.length,
+      totalAnswered,
+      correctCount,
+      accuracyPct,
+      avgResponseMs,
+      powerupsUsed,
+    },
+    breakdown,
+  };
 }
 
 /* ------------------------- live host control ------------------------ */

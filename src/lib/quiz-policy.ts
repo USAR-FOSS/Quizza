@@ -41,6 +41,47 @@ export function canRevealAnswers(
   return false; // never
 }
 
+export interface ScorecardDisclosureContext {
+  isHost: boolean;
+  isOver: boolean;
+  policy: RevealPolicy;
+  mode: "live" | "scheduled";
+  currentQuestionIndex: number;
+  questionIndex: number;
+  isRevealed: boolean;
+  answered: boolean;
+}
+
+/**
+ * Determines whether a specific question's answer/correctness can be disclosed
+ * in a participant's scorecard review.
+ *
+ * Anti-cheat guarantees:
+ * - Host: always sees all answers.
+ * - Over: disclosed unless policy is 'never'.
+ * - Live in-progress: past questions disclosed; current question disclosed only if revealed;
+ *   future questions NEVER disclosed.
+ * - Scheduled in-progress: only disclosed if participant has already answered this question.
+ */
+export function canDiscloseScorecardAnswer(ctx: ScorecardDisclosureContext): boolean {
+  if (ctx.isHost) return true;
+  if (ctx.isOver) {
+    return ctx.policy !== "never";
+  }
+  if (ctx.policy === "per_question") {
+    if (ctx.mode === "live") {
+      if (ctx.currentQuestionIndex === -1) return false;
+      if (ctx.questionIndex < ctx.currentQuestionIndex) return true;
+      if (ctx.questionIndex === ctx.currentQuestionIndex) return ctx.isRevealed;
+      return false;
+    }
+    if (ctx.mode === "scheduled") {
+      return ctx.answered;
+    }
+  }
+  return false;
+}
+
 /** Whether the scored leaderboard may be shown to players. */
 export function canShowLeaderboard(
   s: QuizSettings | null | undefined,

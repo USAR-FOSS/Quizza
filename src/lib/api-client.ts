@@ -125,6 +125,38 @@ export type Results = {
   questionStats: QuestionStats[];
 };
 
+export type QuestionReview = {
+  questionId: string;
+  index: number;
+  prompt: string;
+  type: QuestionType;
+  timeLimitSec: number;
+  maxPoints: number;
+  answered: boolean;
+  userAnswer: string | null;
+  selectedOptionId: string | null;
+  isCorrect: boolean | null;
+  correctAnswer: string | null;
+  pointsAwarded: number | null;
+  responseMs: number | null;
+  powerup?: Powerup | null;
+  attackStolen?: number;
+  attackBlocked?: boolean;
+};
+
+export type ParticipantReview = {
+  participant: LeaderboardEntry;
+  summary: {
+    totalQuestions: number;
+    totalAnswered: number;
+    correctCount: number;
+    accuracyPct: number;
+    avgResponseMs: number;
+    powerupsUsed: string[];
+  };
+  breakdown: QuestionReview[];
+};
+
 export class ApiClientError extends Error {
   constructor(
     public status: number,
@@ -240,6 +272,21 @@ export const api = {
         ...(clientToken ? { "x-client-token": clientToken } : {}),
       },
     }),
+
+  getParticipantReview: (
+    code: string,
+    participantId: string,
+    auth: { hostToken?: string; clientToken?: string },
+  ) =>
+    request<ParticipantReview>(
+      `/sessions/${code}/participants/${participantId}/review`,
+      {
+        headers: {
+          ...(auth.hostToken ? { authorization: `Bearer ${auth.hostToken}` } : {}),
+          ...(auth.clientToken ? { "x-client-token": auth.clientToken } : {}),
+        },
+      },
+    ),
 
   control: (
     code: string,

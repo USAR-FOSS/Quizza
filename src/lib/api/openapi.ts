@@ -183,6 +183,24 @@ const routes: RouteDef[] = [
   },
   {
     method: "get",
+    path: "/api/v1/sessions/{code}/participants/{participantId}/review",
+    tags: ["Results"],
+    summary: "Get detailed participant scorecard and drilldown",
+    description:
+      "Per-question drilldown for a participant including answers submitted, response times, points, and powerup effects. Accessible by the host or by the participant themselves.",
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+      { name: "participantId", in: "path", required: true, description: "Participant UUID" },
+    ],
+    responses: {
+      "200": { description: "Scorecard review", schema: "ParticipantReview" },
+      "401": { description: "Unauthorized", schema: "ApiError" },
+      "403": { description: "Forbidden", schema: "ApiError" },
+      "404": { description: "Session or participant not found", schema: "ApiError" },
+    },
+  },
+  {
+    method: "get",
     path: "/api/v1/sessions/{code}/questions",
     tags: ["Play"],
     summary: "List questions (scheduled mode)",

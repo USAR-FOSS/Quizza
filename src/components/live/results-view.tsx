@@ -10,8 +10,13 @@ import {
   Users,
   MessageCircle,
   LockKeyhole,
+  ChevronRight,
+  Zap,
+  Target,
+  Clock,
+  HelpCircle,
 } from "lucide-react";
-import { api, ApiClientError, type Results } from "@/lib/api-client";
+import { api, ApiClientError, type Results, type ParticipantReview } from "@/lib/api-client";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/site/logo";
 import { formatJoinCode } from "@/lib/codes";
@@ -20,6 +25,7 @@ import { recoverHostToken } from "@/lib/actions/host";
 import { LoadingState } from "@/components/ui/loading-state";
 import { QuizBuddy } from "@/components/ui/quiz-buddy";
 import { WordCloud } from "@/components/ui/word-cloud";
+import { Dialog } from "@/components/ui/dialog";
 
 export function ResultsView({ code }: { code: string }) {
   const [results, setResults] = useState<Results | null>(null);
@@ -30,6 +36,46 @@ export function ResultsView({ code }: { code: string }) {
   const [hostToken, setHostToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
+  const [scorecard, setScorecard] = useState<ParticipantReview | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
+  const [scorecardError, setScorecardError] = useState("");
+
+  useEffect(() => {
+    if (!selectedParticipantId) {
+      setScorecard(null);
+      setScorecardError("");
+      return;
+    }
+    let cancelled = false;
+    setScorecardLoading(true);
+    setScorecardError("");
+    const storedClient =
+      typeof window !== "undefined"
+        ? localStorage.getItem(`quizza:player:${code}`)
+        : null;
+    api
+      .getParticipantReview(code, selectedParticipantId, {
+        hostToken: hostToken ?? undefined,
+        clientToken: storedClient ?? undefined,
+      })
+      .then((data) => {
+        if (!cancelled) setScorecard(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setScorecardError(
+            err instanceof Error ? err.message : "Could not load scorecard",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setScorecardLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, selectedParticipantId, hostToken]);
 
   const load = useCallback(async () => {
     try {
@@ -228,9 +274,12 @@ export function ResultsView({ code }: { code: string }) {
               ) : (
                 <div className="mt-2 space-y-2">
                   {results.leaderboard.map((e) => (
-                    <div
+                    <button
                       key={e.participantId}
-                      className="flex items-center gap-3 rounded-2xl border-2 border-ink bg-paper-2 p-2.5"
+                      type="button"
+                      onClick={() => setSelectedParticipantId(e.participantId)}
+                      className="group flex w-full items-center gap-3 rounded-2xl border-2 border-ink bg-paper-2 p-2.5 text-left transition-transform hover:-translate-y-0.5 active:translate-x-[2px] active:translate-y-[2px]"
+                      title={`View ${e.nickname}’s scorecard`}
                     >
                       <span className="w-6 text-center font-display font-extrabold text-ink-soft">
                         {e.rank}
@@ -247,7 +296,8 @@ export function ResultsView({ code }: { code: string }) {
                       <span className="font-display font-extrabold text-ink">
                         {e.score}
                       </span>
-                    </div>
+                      <ChevronRight className="size-4 text-ink-soft transition-transform group-hover:translate-x-0.5" />
+                    </button>
                   ))}
                 </div>
               )}
@@ -335,6 +385,166 @@ export function ResultsView({ code }: { code: string }) {
                 </div>
               ))}
             </section>
+
+            {selectedParticipantId && (
+              <Dialog
+                title={
+                  scorecard
+                    ? `${scorecard.participant.nickname}’s Scorecard`
+                    : "Participant Scorecard"
+                }
+                onClose={() => setSelectedParticipantId(null)}
+              >
+                {scorecardLoading ? (
+                  <div className="py-12">
+                    <LoadingState label="Loading detailed scorecard…" />
+                  </div>
+                ) : scorecardError ? (
+                  <div className="rounded-2xl border-2 border-coral bg-coral/10 p-5 text-center">
+                    <p className="font-display font-bold text-coral">
+                      {scorecardError}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      Only hosts and the participating player can view this scorecard.
+                    </p>
+                  </div>
+                ) : scorecard ? (
+                  <div className="space-y-6">
+                    {/* Participant Summary Header */}
+                    <div className="flex items-center justify-between rounded-2xl border-2 border-ink bg-paper-2 p-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar
+                          src={scorecard.participant.avatarUrl}
+                          name={scorecard.participant.nickname}
+                          color={scorecard.participant.avatarColor}
+                          size="md"
+                        />
+                        <div>
+                          <h3 className="font-display text-lg font-bold text-ink">
+                            {scorecard.participant.nickname}
+                          </h3>
+                          {scorecard.participant.teamName && (
+                            <p className="text-xs font-semibold text-ink-soft">
+                              Team: {scorecard.participant.teamName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block rounded-xl border border-ink/20 bg-grape/10 px-2.5 py-1 font-display text-xs font-extrabold text-grape">
+                          Rank #{scorecard.participant.rank}
+                        </span>
+                        <p className="mt-1 font-display text-xl font-extrabold text-ink">
+                          {scorecard.participant.score} pts
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl border border-ink/15 bg-paper p-3 text-center">
+                        <Target className="mx-auto size-4 text-mint" />
+                        <p className="mt-1 font-display text-lg font-extrabold text-ink">
+                          {scorecard.summary.accuracyPct}%
+                        </p>
+                        <p className="text-[11px] text-ink-soft">
+                          {scorecard.summary.correctCount} / {scorecard.summary.totalAnswered} Correct
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-ink/15 bg-paper p-3 text-center">
+                        <Clock className="mx-auto size-4 text-grape" />
+                        <p className="mt-1 font-display text-lg font-extrabold text-ink">
+                          {(scorecard.summary.avgResponseMs / 1000).toFixed(1)}s
+                        </p>
+                        <p className="text-[11px] text-ink-soft">Avg Speed</p>
+                      </div>
+                      <div className="rounded-xl border border-ink/15 bg-paper p-3 text-center">
+                        <HelpCircle className="mx-auto size-4 text-ink-soft" />
+                        <p className="mt-1 font-display text-lg font-extrabold text-ink">
+                          {scorecard.summary.totalAnswered} / {scorecard.summary.totalQuestions}
+                        </p>
+                        <p className="text-[11px] text-ink-soft">Answered</p>
+                      </div>
+                      <div className="rounded-xl border border-ink/15 bg-paper p-3 text-center">
+                        <Zap className="mx-auto size-4 text-grape" />
+                        <p className="mt-1 font-display text-lg font-extrabold text-ink">
+                          {scorecard.summary.powerupsUsed.length}
+                        </p>
+                        <p className="text-[11px] text-ink-soft">Powerups</p>
+                      </div>
+                    </div>
+
+                    {/* Per-Question Breakdown */}
+                    <div className="space-y-3">
+                      <h4 className="font-display text-xs font-bold uppercase tracking-wider text-ink-soft">
+                        Question Breakdown
+                      </h4>
+                      {scorecard.breakdown.map((q) => (
+                        <div
+                          key={q.questionId}
+                          className="rounded-2xl border-2 border-ink/10 bg-paper p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="font-display text-sm font-bold text-ink">
+                              {q.index + 1}. {q.prompt}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {q.isCorrect === true && (
+                                <span className="rounded-lg bg-mint/20 px-2 py-0.5 font-display text-xs font-bold text-mint-dark">
+                                  +{q.pointsAwarded} pts
+                                </span>
+                              )}
+                              {q.isCorrect === false && (
+                                <span className="rounded-lg bg-coral/20 px-2 py-0.5 font-display text-xs font-bold text-coral">
+                                  0 pts
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-2.5 space-y-1 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-ink-soft">Answer:</span>
+                              <span
+                                className={cn(
+                                  "font-bold",
+                                  q.isCorrect === true && "text-mint-dark",
+                                  q.isCorrect === false && "text-coral",
+                                  q.isCorrect == null && "text-ink",
+                                )}
+                              >
+                                {q.userAnswer ?? "No response"}
+                              </span>
+                            </div>
+                            {q.isCorrect === false && q.correctAnswer && (
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-ink-soft">Correct:</span>
+                                <span className="font-bold text-mint-dark">
+                                  {q.correctAnswer}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between border-t border-ink/5 pt-2 text-[11px] text-ink-soft">
+                            <span>
+                              {q.responseMs != null
+                                ? `${(q.responseMs / 1000).toFixed(1)}s response`
+                                : "No time record"}
+                            </span>
+                            {q.powerup && (
+                              <span className="font-display font-bold uppercase tracking-wider text-grape">
+                                Powerup: {q.powerup}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </Dialog>
+            )}
           </>
         ) : null}
       </main>
