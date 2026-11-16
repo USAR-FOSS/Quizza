@@ -52,6 +52,31 @@ export async function removePresence(
   await redis.sendCommand(["ZREM", presenceKey(sessionId), participantId]);
 }
 
+/** Pipelined/batched removal of multiple participant presence leases. */
+export async function batchRemovePresence(
+  sessionId: string,
+  participantIds: string[],
+): Promise<void> {
+  if (!usesRedisRealtime() || participantIds.length === 0) return;
+  const redis = await getRedisPublisher();
+  await redis.sendCommand(["ZREM", presenceKey(sessionId), ...participantIds]);
+}
+
+/** Fast O(log N) count of active online participants in Redis sorted set. */
+export async function countOnlineParticipants(
+  sessionId: string,
+): Promise<number | null> {
+  if (!usesRedisRealtime()) return null;
+  const redis = await getRedisPublisher();
+  const count = (await redis.sendCommand([
+    "ZCOUNT",
+    presenceKey(sessionId),
+    String(Date.now() - PRESENCE_TTL_MS),
+    "+inf",
+  ])) as number;
+  return Number(count);
+}
+
 export async function onlineParticipantIds(sessionId: string): Promise<Set<string> | null> {
   if (!usesRedisRealtime()) return null;
   const redis = await getRedisPublisher();

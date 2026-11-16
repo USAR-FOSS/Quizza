@@ -88,8 +88,12 @@ export function scheduleAnswerCount(sessionId: string, questionId: string) {
     if (usesRedisRealtime()) {
       const redis = await getRedisPublisher();
       const key = answerCounterKey(sessionId, questionId);
-      count = await redis.incr(key);
-      await redis.expire(key, ANSWER_COUNTER_TTL_SECONDS);
+      const results = await redis
+        .multi()
+        .incr(key)
+        .expire(key, ANSWER_COUNTER_TTL_SECONDS)
+        .exec();
+      count = Number(results[0]);
     } else {
       const [{ count: dbCount }] = await db
         .select({ count: sql<number>`count(*)::int` })

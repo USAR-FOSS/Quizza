@@ -1,41 +1,42 @@
 import type { NextRequest } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { getRedisPublisher, usesRedisRealtime } from "@/lib/redis/client";
+import { runHealthDiagnostics, evaluateHealthAuth } from "@/lib/diagnostics";
 
 export async function GET(request: NextRequest) {
   const expected = process.env.INTERNAL_HEALTH_SECRET;
+  // Security: accept secret strictly via header to prevent credential leakage in query strings
   const supplied = request.headers.get("x-internal-health-secret");
-  if (!expected || !supplied || supplied !== expected)
-    return Response.json({ ok: false }, { status: 404 });
 
-  const checks: { postgres: "ok" | "error"; redis: "ok" | "error" } = {
-    postgres: "error",
-    redis: "error",
-  };
-  try {
-    await db.execute(sql`select 1`);
-    checks.postgres = "ok";
-  } catch (error) {
-    console.error("[health] postgres failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-  if (!usesRedisRealtime()) checks.redis = "ok";
-  else {
-    try {
-      await (await getRedisPublisher()).ping();
-      checks.redis = "ok";
-    } catch (error) {
-      console.error("[health] redis failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  const auth = evaluateHealthAuth(expected, supplied);
+
+  if (auth.kind === "liveness") {
+    // Basic liveness probe (safe for unauthenticated monitoring)
+    return Response.json(
+      { ok: true, status: "alive" },
+      { status: 200, headers: { "cache-control": "no-store" } },
+    );
   }
 
-  const ok = checks.postgres === "ok" && checks.redis === "ok";
-  return Response.json(
-    { ok, checks },
-    { status: ok ? 200 : 503, headers: { "cache-control": "no-store" } },
-  );
+  if (auth.kind === "disabled") {
+    // Fail-closed when secret is unconfigured
+    return Response.json(
+      { ok: false, error: auth.error },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  if (auth.kind === "unauthorized") {
+    // Reject invalid credentials
+    return Response.json(
+      { ok: false, error: auth.error },
+      { status: 401, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  // Full detailed diagnostics (requires valid internal health secret)
+  const diagnostics = await runHealthDiagnostics();
+
+  return Response.json(diagnostics, {
+    status: diagnostics.ok ? 200 : 503,
+    headers: { "cache-control": "no-store" },
+  });
 }
