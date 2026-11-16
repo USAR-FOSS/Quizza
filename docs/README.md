@@ -11,6 +11,7 @@ architecture specification before making a focused contribution.
 | Run or debug locally | [Development setup](development.md) | [Troubleshooting](development.md#troubleshooting) |
 | Self-host a public event | [Deployment](deployment.md) | [Realtime operations](runbooks/realtime.md) and [upgrades](upgrade.md) |
 | Understand the product direction | [Direction RFC](https://github.com/USAR-FOSS/Quizza/discussions/53) | [Milestones](https://github.com/USAR-FOSS/Quizza/milestones) and [current gaps](gaps.md) |
+| Create a scheduled practice session | [Scheduled practice guide](workshops/scheduled-practice-session.md) | [System design](sdd.md), [current capabilities](gaps.md) |
 | Report a sensitive issue | [Security policy](../SECURITY.md) | Private maintainer contact |
 
 ## Find the right reference
