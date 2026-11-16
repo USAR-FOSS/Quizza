@@ -110,6 +110,8 @@ export function AuthForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "auth-error-region" : undefined}
           className="w-full rounded-2xl border-2 border-ink bg-paper-2 px-4 py-3 font-semibold text-ink placeholder:text-ink-soft/50 focus:bg-white focus:outline-none"
         />
         <input
@@ -125,14 +127,24 @@ export function AuthForm({
           placeholder={
             mode === "register" ? "Password (8+ characters)" : "Password"
           }
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "auth-error-region" : undefined}
           className="w-full rounded-2xl border-2 border-ink bg-paper-2 px-4 py-3 font-semibold text-ink placeholder:text-ink-soft/50 focus:bg-white focus:outline-none"
         />
 
-        {error && (
-          <p className="rounded-xl border-2 border-coral bg-coral/10 p-3 text-center text-sm font-semibold text-ink">
-            {error}
-          </p>
-        )}
+        <div
+          id="auth-error-region"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className={cn(
+            error
+              ? "rounded-xl border-2 border-coral bg-coral/10 p-3 text-center text-sm font-semibold text-ink"
+              : "sr-only",
+          )}
+        >
+          {error}
+        </div>
 
         <button
           type="submit"
