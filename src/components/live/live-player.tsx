@@ -411,6 +411,34 @@ function QuestionLive({
   const [powerup, setPowerup] = useState<Powerup>();
   const [targetId, setTargetId] = useState<string>();
   const [choiceError, setChoiceError] = useState("");
+  const [eliminatedOptionIds, setEliminatedOptionIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (powerup !== "fifty_fifty" || !q?.id || !me.clientToken) {
+      setEliminatedOptionIds([]);
+      return;
+    }
+    let alive = true;
+    api
+      .getFiftyFifty(code, q.id, me.clientToken)
+      .then((res) => {
+        if (alive) {
+          setEliminatedOptionIds(res.eliminatedOptionIds);
+          if (
+            selection &&
+            res.eliminatedOptionIds.includes(selection.optionId ?? "")
+          ) {
+            setSelection(null);
+          }
+        }
+      })
+      .catch(() => {
+        if (alive) setEliminatedOptionIds([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [powerup, q?.id, code, me.clientToken, selection]);
   const uses = snap.quiz.powerupUses ?? 1;
   const availablePowerup = powerup && powerupsLeft(uses, usedPowerups) > 0 ? powerup : undefined;
   const lock = (payload: {
@@ -523,23 +551,29 @@ function QuestionLive({
         >
           {q.options.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              {q.options.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => setSelection({ optionId: o.id })}
-                  aria-pressed={selection?.optionId === o.id}
-                  className={cn(
-                    "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-all duration-150 hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
-                    COLOR_BG[(o.color as OptionColor) ?? "grape"] ?? "bg-grape",
-                    COLOR_TEXT[(o.color as OptionColor) ?? "grape"] ??
-                      "text-white",
-                    selection?.optionId === o.id &&
-                      "scale-[1.01] ring-2 ring-white ring-offset-2 ring-offset-ink",
-                  )}
-                >
-                  {o.label}
-                </button>
-              ))}
+              {q.options.map((o) => {
+                const isEliminated = eliminatedOptionIds.includes(o.id);
+                return (
+                  <button
+                    key={o.id}
+                    disabled={isEliminated}
+                    onClick={() => setSelection({ optionId: o.id })}
+                    aria-pressed={selection?.optionId === o.id}
+                    className={cn(
+                      "flex min-h-16 items-center rounded-2xl border-2 border-ink px-4 py-3 text-left font-display text-lg font-bold text-white shadow-pop transition-all duration-150 hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
+                      COLOR_BG[(o.color as OptionColor) ?? "grape"] ?? "bg-grape",
+                      COLOR_TEXT[(o.color as OptionColor) ?? "grape"] ??
+                        "text-white",
+                      selection?.optionId === o.id &&
+                        "scale-[1.01] ring-2 ring-white ring-offset-2 ring-offset-ink",
+                      isEliminated &&
+                        "pointer-events-none cursor-not-allowed opacity-25 line-through grayscale",
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
             </div>
           ) : q.type === "scale" ? (
             <div className="flex flex-wrap justify-center gap-2">

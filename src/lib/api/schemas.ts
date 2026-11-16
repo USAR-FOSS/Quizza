@@ -20,6 +20,13 @@ export const questionTypeEnum = z.enum([
 
 export const sessionModeEnum = z.enum(["live", "scheduled"]);
 export const sessionStatusEnum = z.enum(["lobby", "active", "ended"]);
+export const powerupEnum = z.enum([
+  "double",
+  "shield",
+  "safety_net",
+  "attack",
+  "fifty_fifty",
+]);
 
 /* ----------------------------- requests ----------------------------- */
 
@@ -53,7 +60,7 @@ export const SubmitAnswerBody = z
     elapsedMs: z.number().int().min(0).optional(),
     // server-issued per-question view token (scheduled mode) for honest timing
     viewToken: z.string().optional(),
-    powerup: z.enum(["double", "shield", "safety_net", "attack"]).optional(),
+    powerup: powerupEnum.optional(),
     powerupTargetId: z.string().uuid().optional(),
   })
   .describe("Submit one answer to a question");
@@ -99,7 +106,7 @@ export const SessionPublic = z.object({
   teamEmailVerification: z.boolean(),
   powerups: z.boolean(),
   powerupUses: z.number().int(),
-  powerupTypes: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
+  powerupTypes: z.array(powerupEnum),
   quiz: QuizSummary,
 });
 
@@ -134,8 +141,12 @@ export const QuestionPublic = z.object({
 
 export const QuestionList = z.object({
   answered: z.array(z.string().uuid()),
-  usedPowerups: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
+  usedPowerups: z.array(powerupEnum),
   questions: z.array(QuestionPublic),
+});
+
+export const FiftyFiftyResult = z.object({
+  eliminatedOptionIds: z.array(z.string().uuid()),
 });
 
 export const ViewToken = z.object({
@@ -156,7 +167,7 @@ export const AnswerResult = z.object({
 
 export const ParticipantProgress = z.object({
   answered: z.array(z.string().uuid()),
-  usedPowerups: z.array(z.enum(["double", "shield", "safety_net", "attack"])),
+  usedPowerups: z.array(powerupEnum),
   results: z.record(z.string(), AnswerResult),
 });
 

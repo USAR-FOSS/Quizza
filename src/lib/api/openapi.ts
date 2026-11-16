@@ -211,6 +211,25 @@ const routes: RouteDef[] = [
     },
   },
   {
+    method: "get",
+    path: "/api/v1/sessions/{code}/questions/{questionId}/fifty-fifty",
+    tags: ["Play"],
+    summary: "Get 50:50 eliminated option IDs",
+    description:
+      "Calculates two incorrect option IDs to eliminate when a player activates the 50:50 powerup. Requires participant client token.",
+    parameters: [
+      { name: "code", in: "path", required: true, description: "Join code" },
+      { name: "questionId", in: "path", required: true, description: "Question UUID" },
+      { name: "x-client-token", in: "header", required: true, description: "Participant client token" },
+    ],
+    responses: {
+      "200": { description: "Eliminated options", schema: "FiftyFiftyResult" },
+      "401": { description: "Missing client token", schema: "ApiError" },
+      "404": { description: "Session not found", schema: "ApiError" },
+      "409": { description: "Powerups disabled or exhausted", schema: "ApiError" },
+    },
+  },
+  {
     method: "post",
     path: "/api/v1/sessions/{code}/answers",
     tags: ["Play"],

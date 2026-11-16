@@ -2,13 +2,35 @@ import type { Powerup, QuizSettings } from "@/lib/db/schema-types";
 
 export type { Powerup };
 
-export const POWERUP_ORDER: Powerup[] = ["double", "safety_net", "shield", "attack"];
+export const POWERUP_ORDER: Powerup[] = ["double", "safety_net", "shield", "attack", "fifty_fifty"];
 export const POWERUP_INFO: Record<Powerup, { name: string; description: string; liveOnly?: boolean }> = {
   double: { name: "Double up", description: "Double the points from a correct answer." },
   safety_net: { name: "Safety net", description: "Even a wrong answer earns one third of this question’s points." },
   shield: { name: "Shield", description: "Block attacks aimed at you on this question.", liveOnly: true },
   attack: { name: "Attack", description: "Pick a player. If they answer correctly, take their question points; otherwise take up to one third of this question’s points from their score.", liveOnly: true },
+  fifty_fifty: { name: "50:50", description: "Eliminate two incorrect options on choice questions." },
 };
+
+/** Selects 2 incorrect options to eliminate for a 50:50 powerup. */
+export function selectFiftyFiftyOptionIds(
+  options: Array<{ id: string; isCorrect: boolean }>,
+  seedKey?: string,
+): string[] {
+  if (options.length <= 2) return [];
+  const incorrect = options.filter((o) => !o.isCorrect);
+  if (incorrect.length < 2) return [];
+  const seed = seedKey ?? "";
+  const hash = (id: string) => {
+    let h = 0;
+    const str = seed + id;
+    for (const ch of str) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return h;
+  };
+  return [...incorrect]
+    .sort((a, b) => hash(a.id) - hash(b.id))
+    .slice(0, 2)
+    .map((o) => o.id);
+}
 
 export function powerupUses(settings: QuizSettings | null | undefined): number {
   return Math.max(1, Math.min(3, settings?.powerupUses ?? 1));

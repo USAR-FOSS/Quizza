@@ -214,6 +214,12 @@ export const api = {
       { headers: { "x-client-token": clientToken } },
     ),
 
+  getFiftyFifty: (code: string, questionId: string, clientToken: string) =>
+    request<{ eliminatedOptionIds: string[] }>(
+      `/sessions/${code}/questions/${questionId}/fifty-fifty`,
+      { headers: { "x-client-token": clientToken } },
+    ),
+
   submitAnswer: (
     code: string,
     body: {

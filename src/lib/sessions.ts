@@ -31,7 +31,13 @@ import { seededShuffle } from "@/lib/shuffle";
 import { signViewToken, verifyViewToken } from "@/lib/view-token";
 import { isClean } from "@/lib/moderation";
 import { csvField } from "@/lib/csv";
-import { applyPowerup, enabledPowerups, powerupUses } from "@/lib/powerups";
+import {
+  applyPowerup,
+  enabledPowerups,
+  powerupUses,
+  powerupsLeft,
+  selectFiftyFiftyOptionIds,
+} from "@/lib/powerups";
 import { matchingTeamName, normalizeTeamNames, normalizeTeamRoster, rosterTeamForEmail } from "@/lib/teams";
 import { getCurrentUser, oidcEnabled } from "@/lib/auth";
 import type { z } from "zod";
@@ -949,7 +955,26 @@ export async function submitAnswer(
           );
         }
       }
-      if (input.powerup) {
+      // Check if a pre-existing 50:50 reservation exists for this question
+      const [existing] = await tx
+        .select()
+        .from(answers)
+        .where(
+          and(
+            eq(answers.questionId, q.id),
+            eq(answers.participantId, participant.id),
+          ),
+        );
+
+      if (existing && existing.optionId !== null) {
+        throw new HttpError(
+          409,
+          "already_answered",
+          "You have already answered this question",
+        );
+      }
+
+      if (input.powerup && (!existing || !existing.powerup)) {
         // Serialize answers by this player across questions so charges cannot
         // be overspent by concurrent requests on different app instances.
         await tx.select({ id: participants.id }).from(participants)
@@ -971,19 +996,37 @@ export async function submitAnswer(
             throw new HttpError(422, "invalid_attack_target", "That player is not in this room");
         }
       }
-      await tx.insert(answers).values({
-        sessionId: s.id,
-        questionId: q.id,
-        participantId: participant.id,
-        optionId,
-        textValue,
-        numberValue,
-        isCorrect,
-        responseMs,
-        points,
-        powerup: input.powerup,
-        powerupTargetId: input.powerupTargetId,
-      });
+
+      if (existing) {
+        // Update the reserved 50:50 answer with final choice and scoring
+        await tx
+          .update(answers)
+          .set({
+            optionId,
+            textValue,
+            numberValue,
+            isCorrect,
+            responseMs,
+            points,
+            powerup: existing.powerup ?? input.powerup,
+            powerupTargetId: input.powerupTargetId,
+          })
+          .where(eq(answers.id, existing.id));
+      } else {
+        await tx.insert(answers).values({
+          sessionId: s.id,
+          questionId: q.id,
+          participantId: participant.id,
+          optionId,
+          textValue,
+          numberValue,
+          isCorrect,
+          responseMs,
+          points,
+          powerup: input.powerup,
+          powerupTargetId: input.powerupTargetId,
+        });
+      }
       if (points > 0)
         await tx
           .update(participants)
@@ -1017,6 +1060,144 @@ export async function submitAnswer(
     pointsAwarded: reveal ? points : null,
     correctOptionId: reveal ? correctOptionId : null,
   };
+}
+
+/** Computes which two wrong options to eliminate for a 50:50 powerup. */
+export async function getFiftyFiftyElimination(
+  code: string,
+  questionId: string,
+  clientToken: string,
+) {
+  const s = await requireSession(code);
+  const p = await getParticipant(s.id, clientToken);
+  if (!p) {
+    throw new HttpError(401, "unauthorized", "Join this room first");
+  }
+
+  // 1. Validate question/session ownership
+  const [q] = await db
+    .select()
+    .from(questions)
+    .where(and(eq(questions.id, questionId), eq(questions.quizId, s.quizId)))
+    .limit(1);
+
+  if (!q) {
+    throw new HttpError(
+      404,
+      "question_not_found",
+      "Question not found in this session's quiz",
+    );
+  }
+
+  const settings = await sessionSettings(s);
+  if (!settings.powerups) {
+    throw new HttpError(
+      409,
+      "powerups_disabled",
+      "Powerups are not enabled for this quiz",
+    );
+  }
+
+  // 2. In live mode, restrict access to the active live question
+  if (s.mode === "live") {
+    if (s.status !== "active") {
+      throw new HttpError(
+        409,
+        "session_not_active",
+        "Cannot use 50:50 when session is not in active play",
+      );
+    }
+    if (s.currentQuestionId !== questionId) {
+      throw new HttpError(
+        409,
+        "invalid_question",
+        "50:50 can only be used on the current active question",
+      );
+    }
+    if (s.revealed) {
+      throw new HttpError(
+        409,
+        "round_revealed",
+        "Cannot use 50:50 after question round is revealed",
+      );
+    }
+    if (
+      s.questionStartedAt &&
+      Date.now() >= s.questionStartedAt.getTime() + q.timeLimitSec * 1000
+    ) {
+      throw new HttpError(
+        409,
+        "question_expired",
+        "Time is up for this question",
+      );
+    }
+  }
+
+  // 3. Check for existing answer or 50:50 activation
+  const [existing] = await db
+    .select()
+    .from(answers)
+    .where(
+      and(
+        eq(answers.sessionId, s.id),
+        eq(answers.participantId, p.id),
+        eq(answers.questionId, questionId),
+      ),
+    )
+    .limit(1);
+
+  if (existing && existing.optionId !== null) {
+    throw new HttpError(
+      409,
+      "already_answered",
+      "You have already answered this question",
+    );
+  }
+
+  const qOpts = await db
+    .select({ id: options.id, isCorrect: options.isCorrect })
+    .from(options)
+    .where(eq(options.questionId, questionId));
+
+  const eliminatedOptionIds = selectFiftyFiftyOptionIds(
+    qOpts,
+    `${p.id}:${questionId}`,
+  );
+
+  // If already activated for this question, return cached elimination without burning another charge
+  if (existing && existing.powerup === "fifty_fifty") {
+    return { eliminatedOptionIds };
+  }
+
+  // 4. Verify participant has remaining powerup uses
+  const used = await db
+    .select({ powerup: answers.powerup })
+    .from(answers)
+    .where(
+      and(
+        eq(answers.sessionId, s.id),
+        eq(answers.participantId, p.id),
+        isNotNull(answers.powerup),
+      ),
+    );
+
+  const left = powerupsLeft(powerupUses(settings), used.map((u) => u.powerup!));
+  if (left <= 0) {
+    throw new HttpError(409, "powerup_used", "No powerup uses remaining");
+  }
+
+  // 5. Durably consume the 50:50 powerup charge server-side
+  await db.insert(answers).values({
+    sessionId: s.id,
+    questionId: q.id,
+    participantId: p.id,
+    optionId: null,
+    isCorrect: false,
+    points: 0,
+    powerup: "fifty_fifty",
+  });
+
+  return { eliminatedOptionIds };
 }
 
 /* ---------------------------- results ------------------------------- */

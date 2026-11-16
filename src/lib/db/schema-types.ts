@@ -48,7 +48,7 @@ export type QuestionRow = {
 export type RevealPolicy = "per_question" | "at_end" | "never";
 export type LeaderboardPolicy = "per_question" | "at_end" | "never";
 export type ParticipationMode = "anonymous" | "one_per_device" | "signed_in";
-export type Powerup = "double" | "shield" | "safety_net" | "attack";
+export type Powerup = "double" | "shield" | "safety_net" | "attack" | "fifty_fifty";
 
 export type QuizSettings = {
   teamSelection?: boolean;

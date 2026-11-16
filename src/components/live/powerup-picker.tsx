@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LifeBuoy, Shield, Swords, Zap } from "lucide-react";
+import { LifeBuoy, Percent, Shield, Swords, Zap } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { POWERUP_INFO, POWERUP_ORDER, powerupsLeft, type Powerup } from "@/lib/powerups";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-const icons = { double: Zap, safety_net: LifeBuoy, shield: Shield, attack: Swords };
+const icons = {
+  double: Zap,
+  safety_net: LifeBuoy,
+  shield: Shield,
+  attack: Swords,
+  fifty_fifty: Percent,
+};
 
 export function PowerupIntro({ types, uses }: { types: Powerup[]; uses: number }) {
   if (!types.length) return null;

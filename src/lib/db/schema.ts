@@ -260,7 +260,9 @@ export const answers = pgTable(
     isCorrect: boolean("is_correct").default(false).notNull(),
     responseMs: integer("response_ms"), // time taken, for speed bonus
     points: integer("points").default(0).notNull(),
-    powerup: text("powerup").$type<"double" | "shield" | "safety_net" | "attack">(),
+    powerup: text("powerup").$type<
+      "double" | "shield" | "safety_net" | "attack" | "fifty_fifty"
+    >(),
     powerupTargetId: uuid("powerup_target_id").references(() => participants.id, {
       onDelete: "set null",
     }),
