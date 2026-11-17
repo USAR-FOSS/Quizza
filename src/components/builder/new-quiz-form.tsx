@@ -51,10 +51,14 @@ export function NewQuizForm() {
         New quiz
       </span>
 
-      <label className="mt-6 block font-display text-sm font-bold text-ink-soft">
+      <label
+        htmlFor="quiz-title-input"
+        className="mt-6 block font-display text-sm font-bold text-ink-soft"
+      >
         Title
       </label>
       <input
+        id="quiz-title-input"
         aria-label="Quiz title"
         autoFocus
         value={title}
@@ -72,57 +76,84 @@ export function NewQuizForm() {
         You can upload cover art and your own icon in the editor.
       </p>
 
-      <label className="mt-6 block font-display text-sm font-bold text-ink-soft">
-        Cover icon
-      </label>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {COVER_ICONS.map((key) => {
-          const Icon = coverIcon(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setIcon(key)}
-              aria-label={`Cover ${key}`}
-              className={cn(
-                "flex size-11 items-center justify-center rounded-xl border-2 transition-transform hover:-translate-y-0.5",
-                icon === key
-                  ? "border-ink bg-white shadow-pop"
-                  : "border-transparent bg-paper-2",
-              )}
-            >
-              <Icon className="size-5 text-ink" />
-            </button>
-          );
-        })}
-      </div>
+      <fieldset className="mt-6 border-0 p-0">
+        <legend
+          id="cover-icon-legend"
+          className="block font-display text-sm font-bold text-ink-soft"
+        >
+          Cover icon
+        </legend>
+        <div
+          role="radiogroup"
+          aria-labelledby="cover-icon-legend"
+          className="mt-2 flex flex-wrap gap-2"
+        >
+          {COVER_ICONS.map((key) => {
+            const Icon = coverIcon(key);
+            const isSelected = icon === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => setIcon(key)}
+                aria-label={`Cover icon ${key}`}
+                className={cn(
+                  "flex size-11 items-center justify-center rounded-xl border-2 transition-transform hover:-translate-y-0.5",
+                  isSelected
+                    ? "border-ink bg-white shadow-pop"
+                    : "border-transparent bg-paper-2",
+                )}
+              >
+                <Icon className="size-5 text-ink" />
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
-      <label className="mt-6 block font-display text-sm font-bold text-ink-soft">
-        Theme
-      </label>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {THEMES.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTheme(t.key)}
-            className={cn(
-              "flex items-center gap-2 rounded-xl border-2 px-3 py-2 font-display text-sm font-bold transition-transform hover:-translate-y-0.5",
-              theme === t.key
-                ? "border-ink bg-white shadow-pop"
-                : "border-transparent bg-paper-2 text-ink-soft",
-            )}
-          >
-            <span
-              className={cn(
-                "size-4 rounded-full border-2 border-ink",
-                t.swatch,
-              )}
-            />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <fieldset className="mt-6 border-0 p-0">
+        <legend
+          id="theme-legend"
+          className="block font-display text-sm font-bold text-ink-soft"
+        >
+          Theme
+        </legend>
+        <div
+          role="radiogroup"
+          aria-labelledby="theme-legend"
+          className="mt-2 flex flex-wrap gap-2"
+        >
+          {THEMES.map((t) => {
+            const isSelected = theme === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => setTheme(t.key)}
+                aria-label={`Theme ${t.label}`}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border-2 px-3 py-2 font-display text-sm font-bold transition-transform hover:-translate-y-0.5",
+                  isSelected
+                    ? "border-ink bg-white shadow-pop"
+                    : "border-transparent bg-paper-2 text-ink-soft",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-4 rounded-full border-2 border-ink",
+                    t.swatch,
+                  )}
+                />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <button
         type="submit"
