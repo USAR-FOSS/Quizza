@@ -31,17 +31,112 @@ export function errorResponse(
   );
 }
 
-/** Parse and validate a JSON body against a zod schema, or throw HttpError. */
-export async function parseBody<S extends z.ZodType>(
-  req: NextRequest,
-  schema: S,
-): Promise<z.infer<S>> {
-  let raw: unknown;
+/** Maximum allowed JSON body size in bytes (64 KB). Supported JSON payloads are < 10 KB. */
+export const DEFAULT_MAX_JSON_BYTES = 64 * 1024; // 64 KB
+
+/**
+ * Read request body with a hard byte count limit, supporting streamed chunks
+ * even when Content-Length is missing or omitted.
+ */
+export async function readBoundedJson(
+  req: NextRequest | Request,
+  maxBytes: number = DEFAULT_MAX_JSON_BYTES,
+): Promise<unknown> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    const len = parseInt(contentLength, 10);
+    if (!Number.isNaN(len) && len > maxBytes) {
+      throw new HttpError(
+        413,
+        "payload_too_large",
+        `Request body exceeds maximum size of ${maxBytes} bytes`,
+      );
+    }
+  }
+
+  if (!req.body) {
+    let text = "";
+    try {
+      text = await req.text();
+    } catch {
+      throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
+    }
+    if (!text.trim()) {
+      throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
+    }
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new HttpError(
+        413,
+        "payload_too_large",
+        `Request body exceeds maximum size of ${maxBytes} bytes`,
+      );
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
+    }
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
   try {
-    raw = await req.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          try {
+            await reader.cancel();
+          } catch {
+            // Ignore cancel error
+          }
+          throw new HttpError(
+            413,
+            "payload_too_large",
+            `Request body exceeds maximum size of ${maxBytes} bytes`,
+          );
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Ignore release error
+    }
+  }
+
+  if (totalBytes === 0) {
+    throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
+  }
+
+  const allBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    allBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(allBytes);
+  try {
+    return JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
   }
+}
+
+/** Parse and validate a JSON body against a zod schema, enforcing byte limits or throwing HttpError. */
+export async function parseBody<S extends z.ZodType>(
+  req: NextRequest | Request,
+  schema: S,
+  maxBytes: number = DEFAULT_MAX_JSON_BYTES,
+): Promise<z.infer<S>> {
+  const raw = await readBoundedJson(req, maxBytes);
   const result = schema.safeParse(raw);
   if (!result.success) {
     throw new HttpError(
