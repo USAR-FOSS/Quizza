@@ -172,6 +172,28 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
     await runSave(() => actions.deleteQuestion(questionId));
   }
 
+  async function duplicateQuestion(questionId: string) {
+    await runSave(async () => {
+      const created = await actions.duplicateQuestion(questionId);
+      setQuiz((q) => {
+        const idx = q.questions.findIndex((x) => x.id === questionId);
+        const next = [...q.questions];
+        if (idx !== -1) {
+          next.splice(idx + 1, 0, created);
+          return {
+            ...q,
+            questions: next.map((item, i) => ({ ...item, position: i })),
+          };
+        }
+        return {
+          ...q,
+          questions: [...next, created],
+        };
+      });
+      setSelectedId(created.id);
+    });
+  }
+
   function reorder(orderedIds: string[]) {
     const map = new Map(quiz.questions.map((q) => [q.id, q]));
     const next = orderedIds
@@ -330,6 +352,7 @@ export function Builder({ initial }: { initial: QuizWithQuestions }) {
           onAdd={addQuestion}
           onReorder={reorder}
           onDelete={deleteQuestion}
+          onDuplicate={duplicateQuestion}
         />
 
         <main className="min-w-0 flex-1">

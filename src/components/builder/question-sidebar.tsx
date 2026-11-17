@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Reorder } from "motion/react";
 import { Dialog } from "@/components/ui/dialog";
-import { Plus, GripVertical, Trash2 } from "lucide-react";
+import { Plus, GripVertical, Trash2, Copy } from "lucide-react";
 import { QUESTION_TYPES, QUESTION_TYPE_ORDER } from "@/lib/quiz-constants";
 import { QUESTION_TYPE_ICON } from "@/components/ui/quiz-icons";
 import type { QuestionType, QuestionWithOptions } from "@/lib/db/schema-types";
@@ -16,6 +16,7 @@ type Props = {
   onAdd: (type: QuestionType) => void;
   onReorder: (orderedIds: string[]) => void;
   onDelete: (id: string) => void;
+  onDuplicate?: (id: string) => void;
 };
 
 export function QuestionSidebar({
@@ -25,6 +26,7 @@ export function QuestionSidebar({
   onAdd,
   onReorder,
   onDelete,
+  onDuplicate,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const ids = questions.map((q) => q.id);
@@ -96,6 +98,19 @@ export function QuestionSidebar({
                   </span>
                 )}
               </span>
+              {onDuplicate && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDuplicate(q.id);
+                  }}
+                  className="shrink-0 rounded-lg p-1 text-ink-soft transition-opacity hover:bg-paper hover:text-ink lg:opacity-0 lg:group-hover:opacity-100 focus:opacity-100"
+                  aria-label="Duplicate question"
+                >
+                  <Copy className="size-4" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => {

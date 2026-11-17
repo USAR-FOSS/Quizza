@@ -284,6 +284,91 @@ export async function deleteQuestion(questionId: string) {
     );
 }
 
+export async function duplicateQuestion(
+  questionId: string,
+): Promise<QuestionWithOptions> {
+  const original = await requireQuestionOwner(questionId);
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Sign in to manage quizzes.");
+
+  return db.transaction(async (tx) => {
+    // 1. Shift subsequent questions down by 1 to make space
+    await tx
+      .update(questions)
+      .set({ position: sql`${questions.position} + 1` })
+      .where(
+        and(
+          eq(questions.quizId, original.quizId),
+          gt(questions.position, original.position),
+        ),
+      );
+
+    // 2. Clone media asset if it's an uploaded asset
+    let mediaUrl = original.mediaUrl;
+    if (mediaUrl && isUploadUrl(mediaUrl)) {
+      const assetId = mediaUrl.split("/").at(-1);
+      if (assetId) {
+        const [asset] = await tx
+          .select()
+          .from(uploads)
+          .where(eq(uploads.id, assetId));
+        if (asset) {
+          const [cloned] = await tx
+            .insert(uploads)
+            .values({
+              quizId: original.quizId,
+              ownerId: user.id,
+              contentType: asset.contentType,
+              data: asset.data,
+            })
+            .returning({ id: uploads.id });
+          mediaUrl = `/api/v1/uploads/${cloned.id}`;
+        }
+      }
+    }
+
+    // 3. Insert duplicated question right after original (original.position + 1)
+    const [duplicated] = await tx
+      .insert(questions)
+      .values({
+        quizId: original.quizId,
+        type: original.type,
+        position: original.position + 1,
+        prompt: original.prompt,
+        timeLimitSec: original.timeLimitSec,
+        points: original.points,
+        mediaUrl,
+        settings: original.settings ? { ...original.settings } : {},
+      })
+      .returning();
+
+    // 4. Fetch original options in order and insert duplicates
+    const origOptions = await tx
+      .select()
+      .from(options)
+      .where(eq(options.questionId, questionId))
+      .orderBy(asc(options.position));
+
+    let createdOptions: OptionRow[] = [];
+    if (origOptions.length) {
+      createdOptions = await tx
+        .insert(options)
+        .values(
+          origOptions.map((o) => ({
+            questionId: duplicated.id,
+            position: o.position,
+            label: o.label,
+            isCorrect: o.isCorrect,
+            color: o.color,
+          })),
+        )
+        .returning();
+    }
+
+    return { ...duplicated, options: createdOptions } as QuestionWithOptions;
+  });
+}
+
 export async function reorderQuestions(quizId: string, orderedIds: string[]) {
   await requireQuizOwner(quizId);
   z.array(z.string().uuid()).parse(orderedIds);
