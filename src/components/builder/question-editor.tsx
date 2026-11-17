@@ -67,6 +67,7 @@ export function QuestionEditor({
         onChange={(e) => onChange({ prompt: e.target.value })}
         rows={2}
         maxLength={300}
+        aria-label={`Question ${index + 1} prompt`}
         placeholder="Type your question…"
         className="mt-4 w-full resize-none rounded-2xl border-2 border-ink bg-paper-2 p-4 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink placeholder:text-ink-soft/40 focus:bg-white focus:outline-none"
       />
@@ -240,7 +241,7 @@ function OptionsEditor({
       )}
 
       <AnimatePresence initial={false}>
-        {question.options.map((opt) => (
+        {question.options.map((opt, i) => (
           <motion.div
             key={opt.id}
             layout
@@ -259,11 +260,11 @@ function OptionsEditor({
             <button
               type="button"
               onClick={() => {
-                const i = OPTION_COLORS.indexOf(opt.color as OptionColor);
-                const next = OPTION_COLORS[(i + 1) % OPTION_COLORS.length];
+                const idx = OPTION_COLORS.indexOf(opt.color as OptionColor);
+                const next = OPTION_COLORS[(idx + 1) % OPTION_COLORS.length];
                 onUpdateOption(opt.id, { color: next });
               }}
-              aria-label="Change colour"
+              aria-label={`Change colour for option ${i + 1}`}
               className={cn(
                 "size-9 shrink-0 rounded-xl border-2 border-ink transition-transform hover:scale-110",
                 COLOR_BG[(opt.color as OptionColor) ?? "grape"] ?? "bg-grape",
@@ -275,6 +276,7 @@ function OptionsEditor({
               onChange={(e) =>
                 onUpdateOption(opt.id, { label: e.target.value })
               }
+              aria-label={`Option ${i + 1} answer text`}
               placeholder="Answer option…"
               maxLength={120}
               className="min-w-0 flex-1 rounded-lg bg-transparent px-1 py-1.5 font-semibold text-ink placeholder:text-ink-soft/50 focus:bg-white focus:outline-none"
@@ -284,7 +286,12 @@ function OptionsEditor({
               <button
                 type="button"
                 onClick={() => onSetCorrect(opt.id)}
-                aria-label="Mark correct"
+                aria-label={
+                  opt.isCorrect
+                    ? `Option ${i + 1} marked as correct`
+                    : `Mark option ${i + 1} as correct`
+                }
+                aria-pressed={opt.isCorrect}
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                   opt.isCorrect
@@ -300,7 +307,7 @@ function OptionsEditor({
               <button
                 type="button"
                 onClick={() => onDeleteOption(opt.id)}
-                aria-label="Delete option"
+                aria-label={`Delete option ${i + 1}`}
                 className="shrink-0 rounded-lg p-1.5 text-ink-soft/50 transition-colors hover:bg-coral/15 hover:text-coral"
               >
                 <Trash2 className="size-4" />
@@ -367,6 +374,7 @@ function ScaleEditor({
         <input
           value={s.scaleMinLabel ?? ""}
           onChange={(e) => patchSettings({ scaleMinLabel: e.target.value })}
+          aria-label="Scale minimum label"
           placeholder="Low label (e.g. Nope)"
           maxLength={40}
           className="rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 text-sm font-semibold text-ink focus:bg-white focus:outline-none"
@@ -374,6 +382,7 @@ function ScaleEditor({
         <input
           value={s.scaleMaxLabel ?? ""}
           onChange={(e) => patchSettings({ scaleMaxLabel: e.target.value })}
+          aria-label="Scale maximum label"
           placeholder="High label (e.g. Love it)"
           maxLength={40}
           className="rounded-xl border-2 border-ink bg-paper-2 px-3 py-2 text-sm font-semibold text-ink focus:bg-white focus:outline-none"
