@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -214,15 +214,36 @@ function Created({
   title: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
   const joinUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/play/${session.code}`
       : "";
 
-  function copy() {
-    navigator.clipboard?.writeText(joinUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  async function copy() {
+    setCopyFailed(false);
+    if (!navigator.clipboard?.writeText) {
+      setCopyFailed(true);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopyFailed(true);
+    }
   }
 
   return (
@@ -242,7 +263,9 @@ function Created({
       </p>
 
       <button
+        type="button"
         onClick={copy}
+        aria-label={copied ? "Join link copied" : "Copy join link"}
         className="mx-auto mt-6 flex items-center gap-2 rounded-xl border-2 border-ink bg-paper-2 px-4 py-2 font-display text-sm font-bold text-ink transition-transform hover:-translate-y-0.5"
       >
         {copied ? (
@@ -252,6 +275,34 @@ function Created({
         )}
         {copied ? "Copied" : "Copy join link"}
       </button>
+
+      <div aria-live="polite" className="sr-only">
+        {copied
+          ? "Join link copied to clipboard"
+          : copyFailed
+            ? "Clipboard copy failed. Select and copy the URL below."
+            : ""}
+      </div>
+
+      {copyFailed && (
+        <div className="mt-4 rounded-xl border-2 border-coral/30 bg-coral/10 p-3 text-left">
+          <label
+            htmlFor="fallback-join-url"
+            className="block text-xs font-semibold text-ink-soft"
+          >
+            Could not copy automatically. Select and copy link:
+          </label>
+          <input
+            id="fallback-join-url"
+            type="text"
+            readOnly
+            value={joinUrl}
+            onFocus={(e) => e.target.select()}
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+            className="mt-1 w-full rounded-lg border border-ink/20 bg-paper px-2 py-1 font-mono text-xs text-ink focus:outline-none focus:ring-2 focus:ring-grape"
+          />
+        </div>
+      )}
 
       {session.mode === "scheduled" && session.opensAt && session.closesAt && (
         <p className="mt-4 text-sm text-ink-soft">
